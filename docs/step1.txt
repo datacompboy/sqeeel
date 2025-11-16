@@ -1,0 +1,12 @@
+Let's create core/backbone of python application that will be turned into a database stress-testing application.
+
+It supposed to be adaptable to various different database engines.
+
+We'll need a:
+ - database modules, providing execution (start/stop/run query and measure impact of the query) and information (language tuning for query templates generator);
+ - query templates generator module, that we'll create later, that supposed to consume database information and produce sequence of query templates;
+ - template instantiator module, that effectively convert given template to the query for any given size nominator X;
+ - stress engine, that will create templates generator, loop over chosen templates, and for each run stress loop for some chosen sizes;
+ - runner application, that should accept command line args, initailize database moule, generator, stress engine and runs the stress (all stubs fo now).
+
+We'll dig into each of the parts later, for now create the stub.
