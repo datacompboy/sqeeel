@@ -1,0 +1,14 @@
+We are database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines.
+
+We'll need a:
+ - database modules, providing execution (start/stop/run query and measure impact of the query) and information (language tuning for query templates generator);
+ - query templates generator module, that we'll create later, that supposed to consume database information and produce sequence of query templates;
+ - template instantiator module, that effectively convert given template to the query for any given size nominator X;
+ - stress engine, that will create templates generator, loop over chosen templates, and for each run stress loop for some chosen sizes;
+ - runner application, that should accept command line args, initailize database moule, generator, stress engine and runs the stress (all stubs fo now).
+
+You already made an application skeleton, let's now build docker-based database executor.
+Please plan and propose the API and class hierarchy that will allow to run arbitrary database in a docker by given an image name; to execute a query we assume we can use "docker exec" to run a client inside of the same docker image and pass the query text to its stdin, and wait for its response.
+The execution time should be measured as time between sending EOF to the client process and finish of the process execution. The exit code should be checked for success signal. In case of the error signal, the output should be stored for later analysis as part of the response struct.

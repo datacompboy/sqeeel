@@ -1,31 +1,55 @@
-"""
-Main runner application for the database stress-testing tool.
-"""
 import argparse
+import sys
 
-from database_modules.base import DatabaseModule
-from query_generator.generator import QueryGenerator
-from stress_engine.engine import StressEngine
+from sqeeel.database_modules.docker_db import DockerExecutor
+
 
 def main():
     """
-    Main function.
+    Main function for the sqeeel stress-testing application.
     """
-    parser = argparse.ArgumentParser(description="Database stress-testing tool.")
-    parser.add_argument("--db-type", required=True, help="Type of the database to test.")
+    parser = argparse.ArgumentParser(description="A database stress-testing tool.")
+    parser.add_argument(
+        "--db-image",
+        type=str,
+        default="postgres:latest",
+        help="The Docker image to use for the database.",
+    )
     args = parser.parse_args()
 
-    print(f"Initializing for database type: {args.db_type}")
+    print(f"Using database image: {args.db_image}")
 
-    # In a real implementation, we would dynamically load the correct database module
-    # based on args.db_type and a config file.
-    db_module = DatabaseModule(config={})
+    # Example usage of the DockerExecutor
+    executor = DockerExecutor(
+        image_name=args.db_image,
+        container_name="sqeeel-test-db",
+        client_command=["psql", "-U", "postgres", "-d", "postgres"],
+        env={"POSTGRES_PASSWORD": "mysecretpassword"},
+    )
 
-    language_tuning = db_module.get_language_tuning()
-    query_generator = QueryGenerator(language_tuning)
-    stress_engine = StressEngine(db_module, query_generator)
+    try:
+        print("Starting database container...")
+        executor.start()
+        print("Container started.")
 
-    stress_engine.run()
+        # Give the database some time to initialize
+        import time
+        time.sleep(5)
+
+        print("Running a test query...")
+        result = executor.run_query("SELECT 1;")
+        print(f"Query finished with exit code: {result.exit_code}")
+        print(f"Duration: {result.duration:.4f}s")
+        if result.exit_code == 0:
+            print(f"Output:\n{result.stdout}")
+        else:
+            print(f"Error:\n{result.stderr}")
+
+    finally:
+        print("Stopping database container...")
+        executor.stop()
+        print("Container stopped.")
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

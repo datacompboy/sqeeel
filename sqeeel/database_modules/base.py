@@ -1,34 +1,41 @@
-"""
-Base class for database modules.
-"""
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Generic, TypeVar
 
-class DatabaseModule:
-    """
-    Base class for database-specific modules.
-    """
-    def __init__(self, config):
-        self.config = config
 
+@dataclass
+class ExecResult:
+    """
+    Base class for execution results.
+    """
+    pass
+
+
+T = TypeVar("T", bound=ExecResult)
+
+
+class Executor(ABC, Generic[T]):
+    """
+    Abstract base class for database executors.
+    """
+
+    @abstractmethod
     def start(self):
         """
-        Start the database engine.
+        Starts the database.
         """
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def stop(self):
         """
-        Stop the database engine.
+        Stops the database.
         """
-        raise NotImplementedError
+        pass
 
-    def run_query(self, query):
+    @abstractmethod
+    def run_query(self, query: str) -> T:
         """
-        Run a query and measure its impact.
+        Runs a query on the database.
         """
-        raise NotImplementedError
-
-    def get_language_tuning(self):
-        """
-        Get language tuning information for the query templates generator.
-        """
-        raise NotImplementedError
+        pass
