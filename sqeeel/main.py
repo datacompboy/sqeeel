@@ -2,6 +2,13 @@ import argparse
 import sys
 
 from sqeeel.database_modules.docker_db import DockerExecutor
+from sqeeel.stress_engine.engine import StressEngine
+
+
+# Stub for the query generator
+class QueryGenerator:
+    def generate_templates(self):
+        return [('SELECT ', '1,', '1', '', '')]
 
 
 def main():
@@ -14,6 +21,11 @@ def main():
         type=str,
         default="postgres:latest",
         help="The Docker image to use for the database.",
+    )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable verbose output.",
     )
     args = parser.parse_args()
 
@@ -36,17 +48,19 @@ def main():
         import time
         time.sleep(5)
 
-        print("Running a test query...")
-        result = executor.run_query("SELECT 1;")
-        print(f"Query finished with exit code: {result.exit_code}")
-        print(f"Duration: {result.duration:.4f}s")
-        if result.exit_code == 0:
-            print(f"Output:\n{result.stdout}")
-        else:
-            print(f"Error:\n{result.stderr}")
+        query_generator = QueryGenerator()
+        stress_engine = StressEngine(executor, query_generator, verbose=args.verbose)
+        
+        intervals, stats = stress_engine.run()
+
+        print("\n--- Stress Test Results ---")
+        for template, template_intervals in intervals.items():
+            print(f"\nTemplate: {template}")
+            for interval in template_intervals:
+                print(f"  {interval['begin']} - {interval['end']}: {interval['effect']}")
 
     finally:
-        print("Stopping database container...")
+        print("\nStopping database container...")
         executor.stop()
         print("Container stopped.")
 

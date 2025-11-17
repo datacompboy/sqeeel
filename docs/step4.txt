@@ -1,0 +1,41 @@
+We are database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines.
+
+We'll need a:
+ - database modules, providing execution (start/stop/run query and measure impact of the query) and information (language tuning for query templates generator);
+ - query templates generator module, that we'll create later, that supposed to consume database information and produce sequence of query templates;
+ - template instantiator module, that effectively convert given template to the query for any given size nominator X;
+ - stress engine, that will create templates generator, loop over chosen templates, and for each run stress loop for some chosen sizes;
+ - runner application, that should accept command line args, initailize database moule, generator, stress engine and runs the stress (all stubs fo now).
+
+You already made an application skeleton, created docker-based database executor, and wrote template instantator. Let's implement stress engine.
+
+The stress loop for a given template should do the following:
+
+1. Do initial discovery phase:
+    - start with size 1 and go up multiplying size by 10 until given constructed query size limit reached (default 32 megabytes).
+    - for each size, remember the (size, size, effect) where "effect" is the query execution effect from the database executor,
+      meaning for interval between "size" and "size" (i.e. only for the size itself) there was that execution effect.
+2. Close the gaps:
+    - scan the ordered list of intervals:
+        (begin1, end1, effect1) (begin2, end2, effect2)
+      and if (end1+1 != begin2) then run the query for the point between end1 and begin2.
+      if the query effect is the same as effect1, then replace end1 with the middle point.
+      if the query effect is the same as effect2, then replace begin2 with the middle point.
+      if the query effect was different than effect1 and effect2, then insert new tuple (middle, middle, effect) and repeat the loop.
+
+At the end of the stressing, we should get the continuous list, covering whole range from 1 to whatever it take for a given template to reach the size limit.
+
+The result of the process should be ordered list of ranges with effect and the oveall list of the (size, stats) of all queries executed with exact sizes and results.
+
+The "effect" should just be failure type (success, error, crash, timeout, hang) and "normalized" error message if there was error message returned by the server.
+For the error normalization we should consult with the database module (as that is database-specific action), for now, let it be just first 100 chars from the string.
+
+The "stats" should be the whole information struct returned by the database executor.
+
+Please add also printing of the intervals obtained after the stressing inside of the main.
+
+To test the end-to-end let's use hardcoded `('SELECT ', '1,', '1', '', '')` template.
+
+Please try to run it to see does it work or print any unexpected errors.
