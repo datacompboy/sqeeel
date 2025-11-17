@@ -35,7 +35,7 @@ def main():
     executor = DockerExecutor(
         image_name=args.db_image,
         container_name="sqeeel-test-db",
-        client_command=["psql", "-U", "postgres", "-d", "postgres"],
+        client_command=["psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1"],
         env={"POSTGRES_PASSWORD": "mysecretpassword"},
     )
 
