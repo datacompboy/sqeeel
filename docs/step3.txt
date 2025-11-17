@@ -1,0 +1,27 @@
+We are database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines.
+
+We'll need a:
+ - database modules, providing execution (start/stop/run query and measure impact of the query) and information (language tuning for query templates generator);
+ - query templates generator module, that we'll create later, that supposed to consume database information and produce sequence of query templates;
+ - template instantiator module, that effectively convert given template to the query for any given size nominator X;
+ - stress engine, that will create templates generator, loop over chosen templates, and for each run stress loop for some chosen sizes;
+ - runner application, that should accept command line args, initailize database moule, generator, stress engine and runs the stress (all stubs fo now).
+
+You already made an application skeleton and created docker-based database executor. Let's implement query templates subsystem.
+
+The query templates should be 5-tuples of strings: prefix, left, middle, right, suffix.
+For example: ('SELECT ', '(1+', '1', ')', '')
+
+This template can be instantiated with different size X via:
+   `prefix + left * X + middle + right * X + suffix.`
+
+The second feature of the template should be replacement of "$" with next sequential number.
+I.e. template ('SELECT ', '$+', '$', '', '') for X=3 should be expanded into string
+   `SELECT 0+1+2+3`
+(because '$+' is used three times, producing '0+', '1+', and '2+'; then midde $ get replaced with '3')
+
+Please create also unit tests for the query templates subsystem.
+
+Please keep the API you already created before: the constructor receives the template; and eqch run of the instantiate will return instantiation of a given size.
