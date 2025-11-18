@@ -1,0 +1,44 @@
+[
+  {
+    "prefix": "SELECT ",
+    "left": "( ",
+    "middle": "NUMBER ",
+    "right": ") ",
+    "suffix": "WHERE NUMBER"
+  },
+  {
+    "prefix": "SELECT NUMBER WHERE ",
+    "left": "",
+    "middle": "NUMBER ",
+    "right": "+ NUMBER ",
+    "suffix": ""
+  },
+  {
+    "prefix": "SELECT ",
+    "left": "",
+    "middle": "NUMBER ",
+    "right": "* NUMBER ",
+    "suffix": "WHERE NUMBER"
+  },
+  {
+    "prefix": "SELECT NUMBER WHERE ",
+    "left": "( ",
+    "middle": "NUMBER ",
+    "right": ") ",
+    "suffix": ""
+  },
+  {
+    "prefix": "SELECT ",
+    "left": "",
+    "middle": "NUMBER ",
+    "right": "+ NUMBER ",
+    "suffix": "WHERE NUMBER"
+  },
+  {
+    "prefix": "SELECT NUMBER WHERE ",
+    "left": "",
+    "middle": "NUMBER ",
+    "right": "* NUMBER ",
+    "suffix": ""
+  }
+]

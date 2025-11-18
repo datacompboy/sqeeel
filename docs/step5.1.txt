@@ -1,0 +1,8 @@
+I've added to your sample grammar rule that should lead to prefix and suffix:
+
+   selectExpr : 'SELECT' expr 'WHERE' expr;
+
+and run the generator using selectExpr as root.
+First problem: The prefix was created correct, but suffix lead to "WHERENUMBER". Please make all tokens concatenation using space between them.
+
+The second problem: the selectExpr has two expr tokens, which means while there are still the same path to the expr (selectExpr => selectExpr:0 => expr), there are two different ways to expand: when the first expr replaced with a terminal and second made to a loop and when the second is a terminal and the first is a loop. The generator should produce both, but right now only the first expr is always made a loop.

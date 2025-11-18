@@ -1,0 +1,55 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines.
+
+For now, you've implemented:
+ - database module, providing running the database engine and running queries against it using docker-based images;
+ - query templates module, that allows to generate queries that are scalable in size;
+ - stress engine, that runs for each template stress loop over whole range;
+ - runner application with CLI interface.
+
+Now we should implement query templates generator engine.
+
+Each query template are defined as 5-tuple: prefix, left, middle, right, suffix.
+The left and right supposed to be repeated multiple times, keeping the query still valid.
+
+The templates generator that we going to create should work the following way:
+
+1. Let's assume we have SQL grammar in a Bison-compatible form for a given database or simplistic generic one.
+
+2. The grammar from the file should be read into a map form.
+   For now, we only care about rules (after the first "%%" line).
+   Each rule is a node with its name in the map.
+   The value in the map is the object that has all the expansion alternatives as separate list.
+   Any token that not appears in the map considered terminal token.
+
+3. We should be able to convert the grammar map into directed graph using NetworkX library.
+   Each rule is represented as node with its name, that is connected with node-alternatives nodes, each connected with all its descendants.
+   For example, if we have:
+   ```
+   expr : number 
+        | number mulop number
+        | number divop number
+   ```
+   we create node "expr", connected with nodes "expr:0", "expr:1", "expr:2".
+   The "expr:0" is connected with node "number"
+   The "expr:1" is connected with nodes "number" and "mulop"
+   The "expr:2" is connected with nodes "number" and "divop".
+   To reduce size of the graph, we can check is there descendant in the graph, and omit connection if it is not (e.g. its a terminal token).
+
+4. To generate the template, we should find all simple loops, using `nx.simple_cycles` with configurable maximum cycle length.
+   Each found cycle is a base to construct one or multiple templates.
+
+5. To construct templates starting from a given start token (f.e. `selectExpr`) and a found simple cycle, we should:
+   - check is there a path from a given token to the given cycle (any cycle node, f.e., using `nx.has_path`);
+   - find the "entry point" of the cycle, by finding the shortest path from given start token to each of the cycle tokens;
+   - "rotate" the cycle to make the "entry point" first in the cycle: that would be one of the rules, and the next will be the exact alternative of the rule.
+
+6. Since each rule alternative contains chain of tokens, the Cycle may start somewhere in the middle of the list: everything before the cycle goes to the `prefix`, everything after goes to the `suffix`.
+   The cycle itself may contain multiple nodes inside, one of them is the one that makes it cycle, that's the cycle breaking point.
+   All the nodes before it goes to the `left`, all after goes to the `right`.
+   The shortest possible non-cyclic alternative of the cycle breaking point node goes to the `middle`.
+
+7. All non-terminal tokens should be replaced with their shortest possible terminal-only alternatives.
+
+Please plan ahead, and write tests for each stage of the template generation process.
