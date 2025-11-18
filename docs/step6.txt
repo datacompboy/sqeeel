@@ -1,0 +1,9 @@
+The query_generator/grammar_parser.py has a simplistic parser for a grammar in bison style.
+The goal of the parser is to extract only the rules in a form of map from rule name to list of alternatives, where each alternative is a sequence of tokens.
+The code right now does not work correctly on a real grammars.
+
+You need to implement the parser in a way, that it can handle on only simple test provided in tests/sample.y but also a real grammar from grammars/pg19gram.y
+
+At the very least, the parser should be able to ignore comments, ignore "%prec TOKEN", ignore code blocks, and correctly parse rules even if the finishing semicolon is omitted (the bison does not require semicolon, and real grammars does omit them sometimes).
+
+Also create additional test grammar file to test these features and update corresponding test in tests/test_grammar_parser.py.
