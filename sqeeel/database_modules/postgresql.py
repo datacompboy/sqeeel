@@ -43,6 +43,7 @@ class PostgresModule(DatabaseModule):
             "typecast": "::",
             "dot_dot": "..",
             "colon_equals": ":=",
+            "NOT_LA": "NOT",
         }
         if token in replacements:
             return replacements[token]
