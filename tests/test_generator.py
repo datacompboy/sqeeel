@@ -55,6 +55,10 @@ class TestQueryGenerator(unittest.TestCase):
             QueryTemplate(prefix='', left='', middle='NUMBER ', right='+ NUMBER ', suffix=''),
             QueryTemplate(prefix='', left='( ', middle='NUMBER ', right=') ', suffix=''),
             QueryTemplate(prefix='', left='', middle='NUMBER ', right='* NUMBER ', suffix=''),
+            # Full-path cycles
+            QueryTemplate(prefix='NUMBER * ', left='( ', middle='NUMBER ', right=') ', suffix=''),
+            QueryTemplate(prefix='NUMBER + ', left='( ', middle='NUMBER ', right=') ', suffix=''),
+            QueryTemplate(prefix='NUMBER + NUMBER * ', left='( ', middle='NUMBER ', right=') ', suffix=''),
         }
         
         self.assertSetEqual(set(templates), expected_templates)
@@ -72,6 +76,13 @@ class TestQueryGenerator(unittest.TestCase):
             QueryTemplate(prefix='SELECT NUMBER WHERE ', left='', middle='NUMBER ', right='* NUMBER ', suffix=''),
             QueryTemplate(prefix='SELECT NUMBER WHERE ', left='', middle='NUMBER ', right='+ NUMBER ', suffix=''),
             QueryTemplate(prefix='SELECT NUMBER WHERE ', left='( ', middle='NUMBER ', right=') ', suffix=''),
+            # Full-path cycles
+            QueryTemplate(prefix='SELECT NUMBER + ', left='( ', middle='NUMBER ', right=') ', suffix='WHERE NUMBER'),
+            QueryTemplate(prefix='SELECT NUMBER + NUMBER * ', left='( ', middle='NUMBER ', right=') ', suffix='WHERE NUMBER'),
+            QueryTemplate(prefix='SELECT NUMBER * ', left='( ', middle='NUMBER ', right=') ', suffix='WHERE NUMBER'),
+            QueryTemplate(prefix='SELECT NUMBER WHERE NUMBER + NUMBER * ', left='( ', middle='NUMBER ', right=') ', suffix=''),
+            QueryTemplate(prefix='SELECT NUMBER WHERE NUMBER + ', left='( ', middle='NUMBER ', right=') ', suffix=''),
+            QueryTemplate(prefix='SELECT NUMBER WHERE NUMBER * ', left='( ', middle='NUMBER ', right=') ', suffix=''),
         }
         
         self.assertSetEqual(set(templates), expected_templates)

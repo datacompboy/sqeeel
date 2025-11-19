@@ -1,5 +1,5 @@
 import re
-from typing import Dict, List, Tuple, Generator
+from typing import Dict, List, Tuple, Generator, Optional, Callable
 
 def remove_comments(text: str) -> str:
     """
@@ -95,7 +95,11 @@ def tokenize(text: str) -> Generator[Tuple[str, str], None, None]:
         yield ('SYMBOL', text[pos])
         pos += 1
 
-def parse_grammar(file_path: str) -> Dict[str, List[List[str]]]:
+def parse_grammar(
+    file_path: str,
+    token_rewriter: Optional[Callable[[str], str]] = None,
+    removed_rules: Optional[List[str]] = None
+) -> Dict[str, List[List[str]]]:
     """
     Parses a Bison-compatible grammar file and returns a map of rules.
     
@@ -134,7 +138,11 @@ def parse_grammar(file_path: str) -> Dict[str, List[List[str]]]:
             if current_rule:
                 rules[current_rule].append(current_alt)
             
-            current_rule = val
+            rule_name = val
+            if token_rewriter:
+                rule_name = token_rewriter(rule_name)
+
+            current_rule = rule_name
             if current_rule not in rules:
                 rules[current_rule] = []
             current_alt = []
@@ -171,16 +179,25 @@ def parse_grammar(file_path: str) -> Dict[str, List[List[str]]]:
             
         # Add token to current alt
         if current_rule:
+            token_val = val
             if typ == 'LITERAL':
                 # Remove quotes for cleaner tokens
-                current_alt.append(val.strip("'\""))
-            else:
-                current_alt.append(val)
+                token_val = val.strip("'\"")
+            
+            if token_rewriter:
+                token_val = token_rewriter(token_val)
+            
+            current_alt.append(token_val)
         
         i += 1
 
     # Handle the last accumulated alternative if the file didn't end with a semicolon/directive
     if current_rule:
          rules[current_rule].append(current_alt)
+    
+    if removed_rules:
+        for rule in removed_rules:
+            if rule in rules:
+                del rules[rule]
         
     return rules

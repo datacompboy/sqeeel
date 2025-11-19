@@ -1,5 +1,5 @@
 from collections import namedtuple
-from typing import List, Optional
+from typing import List, Optional, Callable
 import networkx as nx
 
 from sqeeel.query_generator.grammar_parser import parse_grammar
@@ -13,10 +13,14 @@ def find_cycles(graph: nx.DiGraph, max_cycle_length: int) -> List[List[str]]:
 
 QueryTemplate = namedtuple('QueryTemplate', ['prefix', 'left', 'middle', 'right', 'suffix'])
 class QueryGenerator:
-    def __init__(self, grammar_file: str, max_cycle_length: int = 5):
-        self.rules = parse_grammar(grammar_file)
+    def __init__(self, grammar_file: str, max_cycle_length: int = 5,
+                 grammar_token_rewriter: Optional[Callable[[str], str]] = None,
+                 removed_rules: Optional[List[str]] = None,
+                 template_token_rewriter: Optional[Callable[[str], str]] = None):
+        self.rules = parse_grammar(grammar_file, grammar_token_rewriter, removed_rules)
         self.graph = build_graph(self.rules)
         self.cycles = find_cycles(self.graph, max_cycle_length)
+        self.template_token_rewriter = template_token_rewriter
         self.shortest_expansions = self._get_shortest_terminal_expansions()
 
 
@@ -32,8 +36,11 @@ class QueryGenerator:
             
             rotated_cycle = self._rotate_cycle(cycle, entry_point)
             
+            # Combine path and cycle (excluding the breaking edge) to handle multi-step cycles
+            full_path = path[:-1] + rotated_cycle[:-1]
+            
             # This function will now return a list of templates
-            new_templates = self._construct_templates_for_path(path, rotated_cycle)
+            new_templates = self._construct_templates_for_path(full_path, rotated_cycle)
             templates.update(new_templates)
                 
         return list(templates)
@@ -70,7 +77,10 @@ class QueryGenerator:
             for alternative in self.rules[rule]:
                 for token in alternative:
                     if token not in self.rules:
-                        expansions[token.strip("'")] = token.strip("'")
+                        val = token.strip("'")
+                        if self.template_token_rewriter:
+                            val = self.template_token_rewriter(val)
+                        expansions[token.strip("'")] = val
 
         # Iteratively build up expansions
         changed = True

@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from sqeeel.query_generator.generator import QueryGenerator
 
 @dataclass
 class ExecResult:
@@ -37,5 +39,25 @@ class Executor(ABC, Generic[T]):
     def run_query(self, query: str) -> T:
         """
         Runs a query on the database.
+        """
+        pass
+
+
+class DatabaseModule(ABC):
+    """
+    Abstract base class for database modules.
+    """
+
+    @abstractmethod
+    def create_executor(self, args) -> Executor:
+        """
+        Creates an executor for this database.
+        """
+        pass
+
+    @abstractmethod
+    def create_query_generator(self, grammar_file: str, max_cycle_length: int) -> "QueryGenerator":
+        """
+        Creates a configured QueryGenerator for this database.
         """
         pass

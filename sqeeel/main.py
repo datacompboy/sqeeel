@@ -5,6 +5,14 @@ import json
 from sqeeel.database_modules.docker_db import DockerExecutor
 from sqeeel.stress_engine.engine import StressEngine
 from sqeeel.query_generator import QueryGenerator
+from sqeeel.database_modules.postgresql import PostgresModule
+
+
+def get_db_module(db_type: str):
+    if db_type == 'postgres':
+        return PostgresModule()
+    # Fallback or raise error for unknown db_type
+    raise ValueError(f"Unknown database type: {db_type}")
 
 
 def generate_templates(args):
@@ -12,7 +20,13 @@ def generate_templates(args):
     Generates query templates from a grammar file and saves them to a JSON file.
     """
     print(f"Generating templates from {args.grammar_file}...")
-    generator = QueryGenerator(args.grammar_file, max_cycle_length=args.max_cycle_length)
+    
+    if args.db_type:
+        db_module = get_db_module(args.db_type)
+        generator = db_module.create_query_generator(args.grammar_file, args.max_cycle_length)
+    else:
+        generator = QueryGenerator(args.grammar_file, max_cycle_length=args.max_cycle_length)
+
     templates = generator.generate_templates(args.start_token)
     
     with open(args.output_file, 'w') as f:
@@ -27,13 +41,17 @@ def run_stress_test(args):
     """
     print(f"Using database image: {args.db_image}")
 
-    # Example usage of the DockerExecutor
-    executor = DockerExecutor(
-        image_name=args.db_image,
-        container_name="sqeeel-test-db",
-        client_command=["psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1"],
-        env={"POSTGRES_PASSWORD": "mysecretpassword"},
-    )
+    if args.db_type:
+         db_module = get_db_module(args.db_type)
+         executor = db_module.create_executor(args)
+    else:
+        # Example usage of the DockerExecutor
+        executor = DockerExecutor(
+            image_name=args.db_image,
+            container_name="sqeeel-test-db",
+            client_command=["psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1"],
+            env={"POSTGRES_PASSWORD": "mysecretpassword"},
+        )
 
     try:
         print("Starting database container...")
@@ -86,6 +104,12 @@ def main():
         action="store_true",
         help="Enable verbose output.",
     )
+    stress_parser.add_argument(
+        "--db-type",
+        type=str,
+        default="postgres",
+        help="Database type module to use (e.g. postgres)",
+    )
     stress_parser.set_defaults(func=run_stress_test)
 
     # Sub-parser for the generate-templates command
@@ -93,6 +117,11 @@ def main():
     gen_parser.add_argument("grammar_file", type=str, help="Path to the grammar file.")
     gen_parser.add_argument("start_token", type=str, help="The start token for template generation.")
     gen_parser.add_argument("output_file", type=str, help="Path to the output JSON file.")
+    gen_parser.add_argument(
+        "--db-type",
+        type=str,
+        help="Database type module to use (e.g. postgres) for grammar customization",
+    )
     gen_parser.add_argument(
         "--max-cycle-length",
         type=int,

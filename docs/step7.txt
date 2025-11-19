@@ -1,0 +1,38 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines.
+
+For now, you've implemented:
+ - database module, providing running the database engine and running queries against it using docker-based images;
+ - query templates module, that allows to generate queries that are scalable in size;
+ - query templates generation core based on a bison-style grammar parser;
+ - stress engine, that runs for each template stress loop over whole range;
+ - runner application with CLI interface.
+
+Now it is required to make the generator to be able to consume database specific tuning.
+
+Please create subclass module for Postgresql in squeeel/database_modules, so that squeeel/main.py no longer have it hardcoded, but instead be enabled by the database type command line argument.
+
+The module should also provide function to create the grammar generator, and while there still should be ability to point it to any grammar file, there is a grammars/pg19gram.y file with grammar from Postgresql source code.
+Please avoid reading the file as it large (500kb)
+
+To correctly construct templates from the grammar, we should provide interface from the database module to template generator core to:
+- rewrite grammar tokens on reading the grammar:
+    - to handle workarounds, for postgres that would be remove "_P" suffix from the token, i.e. IF_P become IF, ADD_P become ADD etc
+    - to revert tokenizer work for postgres we should replace:
+        equals_greater	"=>"
+        less_equals		"<="
+        greater_equals	">="
+        less_greater	"<>"
+        not_equals		"!="
+        typecast		"::"
+        dot_dot			\.\.
+        colon_equals	":="
+    - to remove some rules for simplicity: for postgres we should remove `ColId`, `type_function_name`, `ColLabel`, `BareColLabel` to not confuse the later process.
+- Rewrite grammar tokens during template generation:
+  The grammar generator should call a database-specific code providing both the token to be converted and the context so far.
+  For the postgresql, the code should replace:
+        `ColId` with 'x x$', 'type_function_name' with 'x', 'ColLabel' with 'x$', 'BareColLabel' with 'x$'
+        'Sconst' with '"1"', 'Iconst' with '0', 'FCONST' with '0', 'BCONST' with 'b"0"', 'XCONST' with 'x"0"'
+
+Create comprehensive tests for the feature by adding minimal example grammar that using these features in tests/test_grammar_parser.py and tests/test_generator.py.
