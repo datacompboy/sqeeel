@@ -1,0 +1,28 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines.
+You implemented all major modules and parts, last task was generalize database module API to provide extra database-specific setup and grammar handling.
+
+Right now application running code in squeeel/main.py still uses shim instead of proper utilization of database module.
+
+Please make sure that there is no hardcoded database stuff in runner:
+
+- The db-type arg should be mandatory to actually run it;
+- There should be way to get list of supported --db-type options without hardcoding it in main.py;
+- the db-image is specific to docker-backed databases, so this flag should only be enabled if db-type is enable database that requires it,
+  and flag default value should have been provided by the database;
+
+The stress-test command should have options to choose the queries templates:
+
+- templates source:
+    - use the json file (default option)
+    - or dynamically generate templates (sourcing from db_module.create_query_generator directly)
+- templates range:
+    - accept single number or number..number to specify the range
+    - OR --random=X to choose up to X queries randomly from the source.
+
+The stress testing right now only prints progress to stdout if requested. We should add also logging output, by default enabled,
+f.e. via `--log=run.log` (with run.log being default, --nolog to disable logging);
+the log should have printed the same progress as to the stdout, plus each execution stats.
+
+Please also ensure the output is timestamped to the log (and to the stdout if -v is enabled).

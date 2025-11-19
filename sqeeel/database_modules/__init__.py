@@ -1,7 +1,22 @@
 """
 This package will contain database-specific modules.
 """
-from .base import ExecResult, Executor
+from .base import ExecResult, Executor, DatabaseModule
 from .docker_db import DockerExecutor
+from .postgresql import PostgresModule
 
-__all__ = ["Executor", "ExecResult", "DockerExecutor"]
+_MODULES = {
+    m.name: m for m in [
+        PostgresModule(),
+    ]
+}
+
+def get_all_db_modules():
+    return _MODULES
+
+def get_db_module(name: str) -> DatabaseModule:
+    if name not in _MODULES:
+        raise ValueError(f"Unknown database type: {name}. Supported types: {', '.join(_MODULES.keys())}")
+    return _MODULES[name]
+
+__all__ = ["Executor", "ExecResult", "DockerExecutor", "get_all_db_modules", "get_db_module"]

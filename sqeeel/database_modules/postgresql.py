@@ -4,6 +4,18 @@ from .docker_db import DockerExecutor
 from sqeeel.query_generator.generator import QueryGenerator
 
 class PostgresModule(DatabaseModule):
+    @property
+    def name(self) -> str:
+        return "postgres"
+
+    def configure_args(self, parser):
+        parser.add_argument(
+            "--db-image",
+            type=str,
+            default="postgres:latest",
+            help="The Docker image to use for the database.",
+        )
+
     def create_executor(self, args) -> Executor:
         return DockerExecutor(
             image_name=args.db_image,

@@ -1,6 +1,7 @@
 """
 Stress engine.
 """
+import logging
 from ..template_instantiator.instantiator import TemplateInstantiator
 
 
@@ -9,9 +10,9 @@ class StressEngine:
     Creates templates generator, loops over chosen templates, and for each
     runs a stress loop for some chosen sizes.
     """
-    def __init__(self, db_module, query_generator, max_query_size=32*1024*1024, verbose=False):
+    def __init__(self, db_module, templates, max_query_size=32*1024*1024, verbose=False):
         self.db_module = db_module
-        self.query_generator = query_generator
+        self.templates = templates
         self.max_query_size = max_query_size
         self.all_stats = {}
         self.verbose = verbose
@@ -42,21 +43,19 @@ class StressEngine:
         query = instantiator.instantiate(size)
         query_size = len(query)
 
-        if self.verbose:
-            print(f"  Running query for size {size} (query size: {query_size} bytes)...")
+        logging.info(f"  Running query for size {size} (query size: {query_size} bytes)...")
 
         if query_size > self.max_query_size:
-            if self.verbose:
-                print("  Query is too large, skipping execution.")
+            logging.info("  Query is too large, skipping execution.")
             self.all_stats[size] = None
             return None
 
         result = self.db_module.run_query(query)
         self.all_stats[size] = result
         
-        if self.verbose:
-            effect = self._get_effect(result)
-            print(f"  Finished in {result.duration:.4f}s. Effect: {effect}")
+        effect = self._get_effect(result)
+        logging.info(f"  Finished in {result.duration:.4f}s. Effect: {effect}")
+        logging.debug(f"    Full run stats: {result}")
 
         return result
 
@@ -120,11 +119,10 @@ class StressEngine:
         """
         Run the stress test.
         """
-        print("Starting stress test...")
-        templates = self.query_generator.generate_templates()
+        logging.warning("Starting stress test...")
         results = {}
-        for template in templates:
-            print(f"Processing template: {template}")
+        for template in self.templates:
+            logging.warning(f"Processing template: {template}")
             results[str(template)] = self._stress_template(template)
-        print("Stress test finished.")
+        logging.warning("Stress test finished.")
         return results, self.all_stats

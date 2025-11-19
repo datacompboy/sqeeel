@@ -61,3 +61,17 @@ class DatabaseModule(ABC):
         Creates a configured QueryGenerator for this database.
         """
         pass
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """
+        Returns the name of the database module.
+        """
+        pass
+
+    def configure_args(self, parser):
+        """
+        Configures the argument parser with database-specific arguments.
+        """
+        pass
