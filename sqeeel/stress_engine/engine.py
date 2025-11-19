@@ -56,7 +56,7 @@ class StressEngine:
         
         if self.verbose:
             effect = self._get_effect(result)
-            print(f"  Finished in {result.duration:.4f}s. Effect: {effect[0]}")
+            print(f"  Finished in {result.duration:.4f}s. Effect: {effect}")
 
         return result
 
