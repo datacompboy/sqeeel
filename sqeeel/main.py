@@ -144,10 +144,10 @@ def run_stress_test(args):
 
         stress_engine = StressEngine(executor, templates, verbose=args.verbose)
         
-        intervals, stats = stress_engine.run()
+        results = stress_engine.run()
 
         logging.warning("--- Stress Test Results ---")
-        for template, template_intervals in intervals.items():
+        for template, (template_intervals, template_stats) in results.items():
             logging.warning(f"Template: {template}")
             for interval in template_intervals:
                 logging.warning(f"  {interval['begin']} - {interval['end']}: {interval['effect']}")

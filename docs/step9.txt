@@ -1,0 +1,16 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, implementing only Postgresql one for now.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - squeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+Right now stress engine has a bug: when running multiple templates, only first actually runs.
+That is because engine caches run results for size, but the cache is preserved between templates.
+It should instead for each template store executions history, and return it as part of the results.
+That means, the result of template execution should be not just the intervals sequence, but interval sequence AND execution stats.

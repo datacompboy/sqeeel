@@ -14,7 +14,6 @@ class StressEngine:
         self.db_module = db_module
         self.templates = templates
         self.max_query_size = max_query_size
-        self.all_stats = {}
         self.verbose = verbose
 
     def _get_effect(self, result):
@@ -33,12 +32,12 @@ class StressEngine:
             return "crash", ""
         return "error", result.stderr[:100]
 
-    def _run_query_for_size(self, instantiator, size):
+    def _run_query_for_size(self, instantiator, size, stats):
         """
         Instantiates and runs a query for a given size.
         """
-        if size in self.all_stats:
-            return self.all_stats[size]
+        if size in stats:
+            return stats[size]
         
         query = instantiator.instantiate(size)
         query_size = len(query)
@@ -47,11 +46,11 @@ class StressEngine:
 
         if query_size > self.max_query_size:
             logging.info("  Query is too large, skipping execution.")
-            self.all_stats[size] = None
+            stats[size] = None
             return None
 
         result = self.db_module.run_query(query)
-        self.all_stats[size] = result
+        stats[size] = result
         
         effect = self._get_effect(result)
         logging.info(f"  Finished in {result.duration:.4f}s. Effect: {effect}")
@@ -65,11 +64,12 @@ class StressEngine:
         """
         instantiator = TemplateInstantiator(template)
         intervals = []
+        stats = {}
 
         # 1. Initial discovery phase
         size = 1
         while True:
-            result = self._run_query_for_size(instantiator, size)
+            result = self._run_query_for_size(instantiator, size, stats)
             effect = self._get_effect(result)
             if len(intervals) > 0 and intervals[-1]["effect"] == effect:
                 intervals[-1]["end"] = size
@@ -93,7 +93,7 @@ class StressEngine:
 
                 if end1 + 1 < begin2:
                     middle = (end1 + begin2) // 2
-                    result = self._run_query_for_size(instantiator, middle)
+                    result = self._run_query_for_size(instantiator, middle, stats)
                     effect = self._get_effect(result)
                     if effect == effect1:
                         new_intervals[-1]["end"] = middle
@@ -112,7 +112,7 @@ class StressEngine:
             intervals = new_intervals
             if not merged:
                 break
-        return intervals
+        return intervals, stats
 
 
     def run(self):
@@ -125,4 +125,4 @@ class StressEngine:
             logging.warning(f"Processing template: {template}")
             results[str(template)] = self._stress_template(template)
         logging.warning("Stress test finished.")
-        return results, self.all_stats
+        return results
