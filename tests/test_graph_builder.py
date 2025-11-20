@@ -14,7 +14,8 @@ class TestGraphBuilder(unittest.TestCase):
         expected_nodes = [
             'expr', 'expr:0', 'expr:1',
             'term', 'term:0', 'term:1',
-            'factor', 'factor:0', 'factor:1'
+            'factor', 'factor:0', 'factor:1',
+            'selectExpr',  'selectExpr:0',
         ]
         self.assertCountEqual(list(graph.nodes), expected_nodes)
         
@@ -27,7 +28,9 @@ class TestGraphBuilder(unittest.TestCase):
             ('term:0', 'factor'),
             ('term:1', 'term'), ('term:1', 'factor'),
             ('factor', 'factor:0'), ('factor', 'factor:1'),
-            ('factor:0', 'expr')
+            ('factor:0', 'expr'),
+            ('selectExpr', 'selectExpr:0'),
+            ('selectExpr:0', 'expr'),
         ]
         self.assertCountEqual(list(graph.edges), expected_edges)
 
