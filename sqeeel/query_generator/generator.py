@@ -16,7 +16,7 @@ class QueryGenerator:
         self.graph = build_graph(self.rules)
         self.template_token_rewriter = template_token_rewriter
         self.shortest_expansions = self._get_shortest_terminal_expansions()
-        self.cycles = list(nx.simple_cycles(self.graph))
+        self.cycles = list(nx.simple_cycles(self.graph, length_bound=max_cycle_length))
         
     def generate_templates(self, start_token: str) -> List[QueryTemplate]:
         templates: Set[QueryTemplate] = set()
