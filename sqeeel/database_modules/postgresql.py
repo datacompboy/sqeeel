@@ -24,6 +24,7 @@ class PostgresModule(DatabaseModule):
             client_command=["psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1"],
             env={"POSTGRES_PASSWORD": "mysecretpassword"},
             error_normalizer=self._normalize_error,
+            init_queries=["CREATE TABLE IF NOT EXISTS x(x int)"],
         )
 
     def _normalize_error(self, stdout: str, stderr: str) -> str:

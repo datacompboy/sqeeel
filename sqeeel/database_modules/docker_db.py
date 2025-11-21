@@ -30,6 +30,8 @@ class DockerExecutor(Executor[DockerExecResult]):
         client_command: List[str],
         env: Optional[dict] = None,
         error_normalizer: Optional[Callable[[str, str], str]] = None,
+        test_query: str = "SELECT 1",
+        init_queries: Optional[List[str]] = None,
     ):
         """
         Initializes the DockerExecutor.
@@ -40,12 +42,16 @@ class DockerExecutor(Executor[DockerExecResult]):
                                inside the container (e.g., ['psql', '-U', 'user']).
         :param env: A dictionary of environment variables to set in the container.
         :param error_normalizer: A function that takes (stdout, stderr) and returns a normalized error message.
+        :param test_query: A query to run to check if the database is ready.
+        :param init_queries: A list of queries to run after the database is ready.
         """
         self.image_name = image_name
         self.container_name = container_name
         self.client_command = client_command
         self.env = env or {}
         self.error_normalizer = error_normalizer
+        self.test_query = test_query
+        self.init_queries = init_queries or []
         self._container_id: Optional[str] = None
 
     def start(self):
@@ -71,6 +77,28 @@ class DockerExecutor(Executor[DockerExecResult]):
             subprocess.run(["docker", "stop", self._container_id])
             subprocess.run(["docker", "rm", self._container_id])
             self._container_id = None
+
+    def wait_for_ready(self):
+        print("Waiting for database to be ready...")
+        start_time = time.time()
+        while True:
+            try:
+                result = self.run_query(self.test_query)
+                if result.exit_code == 0:
+                    break
+            except Exception:
+                pass
+            
+            if time.time() - start_time > 60:
+                raise TimeoutError("Database failed to start within 60 seconds.")
+            
+            time.sleep(1)
+        
+        print("Database is ready. Running initialization queries...")
+        for query in self.init_queries:
+            res = self.run_query(query)
+            if res.exit_code != 0:
+                raise RuntimeError(f"Initialization query failed: {query}\nError: {res.error_message}")
 
     def run_query(self, query: str) -> DockerExecResult:
         """

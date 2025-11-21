@@ -132,10 +132,8 @@ def run_stress_test(args):
     try:
         logging.info("Starting database container...")
         executor.start()
+        executor.wait_for_ready()
         logging.warning("Database container started.")
-
-        # Give the database some time to initialize
-        time.sleep(5)
 
         templates = get_templates(args, db_module)
         templates = filter_templates(templates, args)

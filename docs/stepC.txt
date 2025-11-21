@@ -1,0 +1,20 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, implementing only Postgresql one for now.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+Right now database creation only starts the database. The waiting for initialization is done outside with simple wait.
+
+Please add a generic support for the database startup sequence, that should include:
+    - run the database, using database-specific function;
+    - wait for it completion, by combination of wait and running db-specific test query, by default, "SELECT 1";
+    - run some initialization queries -- for postgresql that should be "CREATE TABLE IF NOT EXISTS x(x int)".
+
+Then remove sleep from sqeeel/main.py.

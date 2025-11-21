@@ -35,6 +35,12 @@ class Executor(ABC, Generic[T]):
         """
         pass
 
+    def wait_for_ready(self):
+        """
+        Waits for the database to be ready to accept queries.
+        """
+        pass
+
     @abstractmethod
     def run_query(self, query: str) -> T:
         """
