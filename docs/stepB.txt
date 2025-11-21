@@ -1,0 +1,27 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, implementing only Postgresql one for now.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - squeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+The execution process right now doesn't post-process errors from the database, and @database_modules/postgresql.py only provides client command.
+As a result, multiple similar errors doesn't get folded into one as designed.
+
+Please make sure that the error message is always get postprocessed in a database-specific way, so the stress engine relies on normalized errors and
+not the raw stdout/stderr.
+
+Actual handling for postgresql should do the following:
+    1. Only keep the first line, e.g.:
+        'ERROR:  SELECT * with no tables specified is not valid\nLINE 1: ...T ON ( 0 , 0 , 0 , 0 , 0 , 0 , 0 ,'
+        should became
+        'ERROR:  SELECT * with no tables specified is not valid\n'
+    2. Replace text inside of the double-quotes with three dots, e.g.:
+        'ERROR:  column "param" does not exist\n'
+        should became
+        'ERROR:  column "..." does not exist\n'

@@ -1,12 +1,12 @@
 import subprocess
 import time
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Callable
 
 from .base import ExecResult, Executor
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DockerExecResult(ExecResult):
     """
     Represents the result of a command executed in a Docker container.
@@ -23,7 +23,14 @@ class DockerExecutor(Executor[DockerExecResult]):
     using 'docker exec'.
     """
 
-    def __init__(self, image_name: str, container_name: str, client_command: List[str], env: Optional[dict] = None):
+    def __init__(
+        self,
+        image_name: str,
+        container_name: str,
+        client_command: List[str],
+        env: Optional[dict] = None,
+        error_normalizer: Optional[Callable[[str, str], str]] = None,
+    ):
         """
         Initializes the DockerExecutor.
 
@@ -32,11 +39,13 @@ class DockerExecutor(Executor[DockerExecResult]):
         :param client_command: The command and arguments to run the database client
                                inside the container (e.g., ['psql', '-U', 'user']).
         :param env: A dictionary of environment variables to set in the container.
+        :param error_normalizer: A function that takes (stdout, stderr) and returns a normalized error message.
         """
         self.image_name = image_name
         self.container_name = container_name
         self.client_command = client_command
         self.env = env or {}
+        self.error_normalizer = error_normalizer
         self._container_id: Optional[str] = None
 
     def start(self):
@@ -85,9 +94,17 @@ class DockerExecutor(Executor[DockerExecResult]):
         
         duration = end_time - start_time
 
+        error_message = None
+        if proc.returncode != 0:
+            if self.error_normalizer:
+                error_message = self.error_normalizer(stdout, stderr)
+            else:
+                error_message = (stderr.strip() or stdout.strip())[:100]
+
         return DockerExecResult(
             exit_code=proc.returncode,
             stdout=stdout,
             stderr=stderr,
             duration=duration,
+            error_message=error_message,
         )

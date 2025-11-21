@@ -1,16 +1,16 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Generic, TypeVar, TYPE_CHECKING
+from typing import Generic, TypeVar, TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from sqeeel.query_generator.generator import QueryGenerator
 
-@dataclass
+@dataclass(kw_only=True)
 class ExecResult:
     """
     Base class for execution results.
     """
-    pass
+    error_message: Optional[str] = None
 
 
 T = TypeVar("T", bound=ExecResult)

@@ -1,3 +1,4 @@
+import re
 from typing import Optional, List
 from .base import DatabaseModule, Executor
 from .docker_db import DockerExecutor
@@ -22,7 +23,17 @@ class PostgresModule(DatabaseModule):
             container_name="sqeeel-test-db-postgres",
             client_command=["psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1"],
             env={"POSTGRES_PASSWORD": "mysecretpassword"},
+            error_normalizer=self._normalize_error,
         )
+
+    def _normalize_error(self, stdout: str, stderr: str) -> str:
+        if not stderr:
+            return ""
+        lines = stderr.splitlines(keepends=True)
+        first_line = lines[0] if lines else ""
+        
+        # Replace text inside of the double-quotes with three dots
+        return re.sub(r'"[^"]*"', '"..."', first_line)
 
     def create_query_generator(self, grammar_file: str, max_cycle_length: int):
         return QueryGenerator(

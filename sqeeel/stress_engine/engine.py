@@ -30,7 +30,11 @@ class StressEngine:
             return "timeout", ""
         if result.exit_code < 0:
             return "crash", ""
-        return "error", result.stderr[:100]
+        
+        error_msg = getattr(result, "error_message", None)
+        if not error_msg:
+            error_msg = result.stderr[:100]
+        return "error", error_msg
 
     def _run_query_for_size(self, instantiator, size, stats):
         """
