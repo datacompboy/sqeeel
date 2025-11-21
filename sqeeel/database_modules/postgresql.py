@@ -35,14 +35,14 @@ class PostgresModule(DatabaseModule):
 
     def _grammar_token_rewriter(self, token: str) -> str:
         replacements = {
-            "equals_greater": "=>",
-            "less_equals": "<=",
-            "greater_equals": ">=",
-            "less_greater": "<>",
-            "not_equals": "!=",
-            "typecast": "::",
-            "dot_dot": "..",
-            "colon_equals": ":=",
+            "EQUALS_GREATER": "=>",
+            "LESS_EQUALS": "<=",
+            "GREATER_EQUALS": ">=",
+            "LESS_GREATER": "<>",
+            "NOT_EQUALS": "!=",
+            "TYPECAST": "::",
+            "DOT_DOT": "..",
+            "COLON_EQUALS": ":=",
             "NOT_LA": "NOT",
         }
         if token in replacements:
