@@ -21,7 +21,7 @@ class TestQueryGenerator(unittest.TestCase):
     def test_find_shortest_path_entry_point(self):
         generator = QueryGenerator('tests/sample.y')
         cycle = ['expr', 'expr:1']
-        entry_point = generator._find_shortest_path_entry_point('expr', cycle)
+        entry_point, _ = generator._find_shortest_path_to_cycle('expr', cycle)
         self.assertEqual(entry_point, 'expr')
 
     def test_rotate_cycle(self):
@@ -36,13 +36,6 @@ class TestQueryGenerator(unittest.TestCase):
             'expr': 'NUMBER',
             'term': 'NUMBER',
             'factor': 'NUMBER',
-            'NUMBER': 'NUMBER',
-            '+': '+',
-            '*': '*',
-            '(': '(',
-            ')': ')',
-            'SELECT': 'SELECT',
-            'WHERE': 'WHERE',
             'selectExpr': "SELECT NUMBER WHERE NUMBER"
         }
         self.assertEqual(generator.shortest_expansions, expected_expansions)
@@ -55,10 +48,10 @@ class TestQueryGenerator(unittest.TestCase):
             QueryTemplate(prefix='', left='', middle='NUMBER ', right='+ NUMBER ', suffix=''),
             QueryTemplate(prefix='', left='( ', middle='NUMBER ', right=') ', suffix=''),
             QueryTemplate(prefix='', left='', middle='NUMBER ', right='* NUMBER ', suffix=''),
-            # Full-path cycles
-            QueryTemplate(prefix='NUMBER * ', left='( ', middle='NUMBER ', right=') ', suffix=''),
-            QueryTemplate(prefix='NUMBER + ', left='( ', middle='NUMBER ', right=') ', suffix=''),
-            QueryTemplate(prefix='NUMBER + NUMBER * ', left='( ', middle='NUMBER ', right=') ', suffix=''),
+            # Full-path cycles (updated for shortest-path-to-cycle logic)
+            QueryTemplate(prefix='', left='NUMBER * ( ', middle='NUMBER ', right=') ', suffix=''),
+            QueryTemplate(prefix='', left='NUMBER + ( ', middle='NUMBER ', right=') ', suffix=''),
+            QueryTemplate(prefix='', left='NUMBER + NUMBER * ( ', middle='NUMBER ', right=') ', suffix=''),
         }
         
         self.assertSetEqual(set(templates), expected_templates)
@@ -87,13 +80,13 @@ class TestQueryGenerator(unittest.TestCase):
             QueryTemplate(prefix='SELECT NUMBER WHERE ', left='', middle='NUMBER ', right='* NUMBER ', suffix=''),
             QueryTemplate(prefix='SELECT NUMBER WHERE ', left='', middle='NUMBER ', right='+ NUMBER ', suffix=''),
             QueryTemplate(prefix='SELECT NUMBER WHERE ', left='( ', middle='NUMBER ', right=') ', suffix=''),
-            # Full-path cycles
-            QueryTemplate(prefix='SELECT NUMBER + ', left='( ', middle='NUMBER ', right=') ', suffix='WHERE NUMBER'),
-            QueryTemplate(prefix='SELECT NUMBER + NUMBER * ', left='( ', middle='NUMBER ', right=') ', suffix='WHERE NUMBER'),
-            QueryTemplate(prefix='SELECT NUMBER * ', left='( ', middle='NUMBER ', right=') ', suffix='WHERE NUMBER'),
-            QueryTemplate(prefix='SELECT NUMBER WHERE NUMBER + NUMBER * ', left='( ', middle='NUMBER ', right=') ', suffix=''),
-            QueryTemplate(prefix='SELECT NUMBER WHERE NUMBER + ', left='( ', middle='NUMBER ', right=') ', suffix=''),
-            QueryTemplate(prefix='SELECT NUMBER WHERE NUMBER * ', left='( ', middle='NUMBER ', right=') ', suffix=''),
+            # Full-path cycles (updated for shortest-path-to-cycle logic)
+            QueryTemplate(prefix='SELECT ', left='NUMBER + ( ', middle='NUMBER ', right=') ', suffix='WHERE NUMBER'),
+            QueryTemplate(prefix='SELECT ', left='NUMBER + NUMBER * ( ', middle='NUMBER ', right=') ', suffix='WHERE NUMBER'),
+            QueryTemplate(prefix='SELECT ', left='NUMBER * ( ', middle='NUMBER ', right=') ', suffix='WHERE NUMBER'),
+            QueryTemplate(prefix='SELECT NUMBER WHERE ', left='NUMBER + NUMBER * ( ', middle='NUMBER ', right=') ', suffix=''),
+            QueryTemplate(prefix='SELECT NUMBER WHERE ', left='NUMBER + ( ', middle='NUMBER ', right=') ', suffix=''),
+            QueryTemplate(prefix='SELECT NUMBER WHERE ', left='NUMBER * ( ', middle='NUMBER ', right=') ', suffix=''),
         }
         
         self.assertSetEqual(set(templates), expected_templates)

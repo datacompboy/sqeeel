@@ -1,17 +1,12 @@
 from collections import namedtuple
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Tuple, Set, Dict
 import networkx as nx
 
 from sqeeel.query_generator.grammar_parser import parse_grammar
 from sqeeel.query_generator.graph_builder import build_graph
 
-def find_cycles(graph: nx.DiGraph, max_cycle_length: int) -> List[List[str]]:
-    """
-    Finds all simple cycles in a graph with a maximum length.
-    """
-    return list(nx.simple_cycles(graph, length_bound=max_cycle_length))
-
 QueryTemplate = namedtuple('QueryTemplate', ['prefix', 'left', 'middle', 'right', 'suffix'])
+
 class QueryGenerator:
     def __init__(self, grammar_file: str, max_cycle_length: int = 5,
                  grammar_token_rewriter: Optional[Callable[[str], str]] = None,
@@ -19,181 +14,194 @@ class QueryGenerator:
                  template_token_rewriter: Optional[Callable[[str], str]] = None):
         self.rules = parse_grammar(grammar_file, grammar_token_rewriter, removed_rules)
         self.graph = build_graph(self.rules)
-        self.cycles = find_cycles(self.graph, max_cycle_length)
         self.template_token_rewriter = template_token_rewriter
         self.shortest_expansions = self._get_shortest_terminal_expansions()
+        self.cycles = list(nx.simple_cycles(self.graph))
+        
+    def generate_templates(self, start_token: str) -> List[QueryTemplate]:
+        templates: Set[QueryTemplate] = set()
 
-
-    def generate_templates(self, start_token: str):
-        templates = set()
-        for cycle in self.cycles:
-            # Find a single, representative entry point to the cycle
-            entry_point = self._find_shortest_path_entry_point(start_token, cycle)
+        for cycle_nodes in self.cycles:
+            # 1. Find the shortest path from start_token to the cycle
+            entry_point, path_to_cycle = self._find_shortest_path_to_cycle(start_token, cycle_nodes)
+            
             if entry_point is None:
-                continue
+                continue # Cycle not reachable from start_token
             
-            path = nx.shortest_path(self.graph, start_token, entry_point)
-            
-            rotated_cycle = self._rotate_cycle(cycle, entry_point)
-            
-            # Combine path and cycle (excluding the breaking edge) to handle multi-step cycles
-            full_path = path[:-1] + rotated_cycle[:-1]
-            
-            # This function will now return a list of templates
-            new_templates = self._construct_templates_for_path(full_path, rotated_cycle)
-            templates.update(new_templates)
+            assert path_to_cycle is not None
                 
+            # 2. Rotate cycle to start at entry_point
+            rotated_cycle = self._rotate_cycle(cycle_nodes, entry_point)
+            
+            # 3. Expand path to get prefixes and suffixes
+            path_expansions = self._expand_path(path_to_cycle)
+            
+            # 4. Expand cycle to get lefts and rights
+            # The cycle from nx.simple_cycles doesn't repeat the start node at the end.
+            # We append entry_point to close it for expansion logic.
+            cycle_path = rotated_cycle + [entry_point]
+            loop_expansions = self._expand_loop(cycle_path)
+            
+            # 5. Middle is the shortest terminal expansion of the entry_point
+            middle = self.shortest_expansions.get(entry_point, "")
+            
+            # Combine all parts
+            for prefix, suffix in path_expansions:
+                for left, right in loop_expansions:
+                    # Ensure proper spacing
+                    p = (prefix + " ") if prefix else ""
+                    l = (left + " ") if left else ""
+                    m = (middle + " ") if middle else ""
+                    r = (right + " ") if right else ""
+                    s = suffix if suffix else ""
+                    
+                    templates.add(QueryTemplate(p, l, m, r, s.strip()))
+
         return list(templates)
 
-    def _find_shortest_path_entry_point(self, start_token: str, cycle: List[str]) -> Optional[str]:
-        """
-        Finds the entry point of a cycle that is reachable via the shortest path from the start token.
-        """
-        shortest_path_len = float('inf')
+    def _find_shortest_path_to_cycle(self, start_token: str, cycle_nodes: List[str]) -> Tuple[Optional[str], Optional[List[str]]]:
+        shortest_path = None
+        shortest_len = float('inf')
         entry_point = None
-        for node in cycle:
+        
+        cycle_set = set(cycle_nodes)
+        
+        # Optimization: if start_token is in cycle, path is [start_token]
+        if start_token in cycle_set:
+             return start_token, [start_token]
+
+        # Iterate over all nodes in cycle to find the one closest to start_token
+        for node in cycle_nodes:
+            # We only care about Rule nodes as entry points, not Alternative nodes (Rule:N)
+            if ':' in node: 
+                continue
+                
             try:
-                path_len = nx.shortest_path_length(self.graph, start_token, node)
-                if path_len < shortest_path_len:
-                    shortest_path_len = path_len
+                path = nx.shortest_path(self.graph, start_token, node)
+                if len(path) < shortest_len:
+                    shortest_len = len(path)
+                    shortest_path = path
                     entry_point = node
             except nx.NetworkXNoPath:
                 continue
-        return entry_point
+                
+        return entry_point, shortest_path
 
     def _rotate_cycle(self, cycle: List[str], entry_point: str) -> List[str]:
-        """
-        Rotates a cycle to start with the entry point.
-        """
-        entry_index = cycle.index(entry_point)
-        return cycle[entry_index:] + cycle[:entry_index]
+        try:
+            idx = cycle.index(entry_point)
+            return cycle[idx:] + cycle[:idx]
+        except ValueError:
+            return cycle
 
+    def _get_token_str(self, token: str) -> str:
+        if token in self.rules:
+             return self.shortest_expansions.get(token, "")
+        
+        val = token.strip("'\"")
+        if self.template_token_rewriter:
+            val = self.template_token_rewriter(val)
+        return val
 
-    def _get_shortest_terminal_expansions(self):
+    def _expand_path(self, path: List[str]) -> List[Tuple[str, str]]:
+        current_states = [("", "")]
+        
+        for i in range(0, len(path) - 1, 2):
+            rule_node = path[i]
+            alt_node = path[i+1]
+            next_rule_node = path[i+2] if i + 2 < len(path) else None
+            
+            if next_rule_node is None:
+                break
+
+            _, idx_str = alt_node.split(':')
+            alt_idx = int(idx_str)
+            
+            tokens = self.rules[rule_node][alt_idx]
+            indices = [j for j, t in enumerate(tokens) if t == next_rule_node]
+            
+            new_states = []
+            for prev_prefix, prev_suffix in current_states:
+                for idx in indices:
+                    p_parts = [self._get_token_str(t) for t in tokens[:idx]]
+                    local_prefix = " ".join(filter(None, p_parts))
+                    
+                    s_parts = [self._get_token_str(t) for t in tokens[idx+1:]]
+                    local_suffix = " ".join(filter(None, s_parts))
+                    
+                    combo_prefix = (prev_prefix + " " + local_prefix).strip()
+                    combo_suffix = (local_suffix + " " + prev_suffix).strip()
+                    
+                    new_states.append((combo_prefix, combo_suffix))
+            
+            current_states = new_states
+            
+        return current_states
+
+    def _expand_loop(self, cycle_path: List[str]) -> List[Tuple[str, str]]:
+        current_states = [("", "")]
+        
+        for i in range(0, len(cycle_path) - 1, 2):
+            rule_node = cycle_path[i]
+            alt_node = cycle_path[i+1]
+            next_rule_node = cycle_path[i+2]
+            
+            _, idx_str = alt_node.split(':')
+            alt_idx = int(idx_str)
+            tokens = self.rules[rule_node][alt_idx]
+            
+            indices = [j for j, t in enumerate(tokens) if t == next_rule_node]
+            
+            new_states = []
+            for prev_left, prev_right in current_states:
+                for idx in indices:
+                    l_parts = [self._get_token_str(t) for t in tokens[:idx]]
+                    local_left = " ".join(filter(None, l_parts))
+                    
+                    r_parts = [self._get_token_str(t) for t in tokens[idx+1:]]
+                    local_right = " ".join(filter(None, r_parts))
+                    
+                    combo_left = (prev_left + " " + local_left).strip()
+                    combo_right = (local_right + " " + prev_right).strip()
+                    
+                    new_states.append((combo_left, combo_right))
+            
+            current_states = new_states
+            
+        return current_states
+
+    def _get_shortest_terminal_expansions(self) -> Dict[str, str]:
         expansions = {}
         
-        # Initialize with terminals
-        for rule in self.rules:
-            for alternative in self.rules[rule]:
-                for token in alternative:
-                    if token not in self.rules:
-                        val = token.strip("'")
-                        if self.template_token_rewriter:
-                            val = self.template_token_rewriter(val)
-                        expansions[token.strip("'")] = val
-
-        # Iteratively build up expansions
         changed = True
         while changed:
             changed = False
             for rule, alternatives in self.rules.items():
-                shortest_expansion = None
+                best_expansion = expansions.get(rule)
+                
                 for alternative in alternatives:
-                    current_expansion = ""
-                    current_expansion_list = []
+                    current_parts = []
                     possible = True
                     for token in alternative:
-                        if token in expansions:
-                            current_expansion_list.append(expansions[token])
+                        if token in self.rules:
+                            if token in expansions:
+                                current_parts.append(expansions[token])
+                            else:
+                                possible = False
+                                break
                         else:
-                            possible = False
-                            break
+                            val = token.strip("'\"")
+                            if self.template_token_rewriter:
+                                val = self.template_token_rewriter(val)
+                            current_parts.append(val)
+                    
                     if possible:
-                        current_expansion = " ".join(current_expansion_list)
-                    if possible:
-                        if shortest_expansion is None or len(current_expansion) < len(shortest_expansion):
-                            shortest_expansion = current_expansion
-                
-                if shortest_expansion is not None:
-                    if rule not in expansions or len(shortest_expansion) < len(expansions[rule]):
-                        expansions[rule] = shortest_expansion
-                        changed = True
+                        candidate = " ".join(filter(None, current_parts))
+                        if best_expansion is None or len(candidate) < len(best_expansion):
+                            best_expansion = candidate
+                            
+                if best_expansion is not None and (rule not in expansions or best_expansion != expansions[rule]):
+                    expansions[rule] = best_expansion
+                    changed = True
+                    
         return expansions
-
-
-    def _construct_templates_for_path(self, path_to_cycle: List[str], cycle: List[str]) -> List[QueryTemplate]:
-        # 1. Get cycle parts (constant for all templates from this path/cycle)
-        breaking_point_node = cycle[-1]
-        rule_name, alt_index_str = breaking_point_node.split(':')
-        alt_index = int(alt_index_str)
-        
-        middle_alt = self._find_shortest_non_cyclic_alternative(rule_name, cycle)
-        middle = " ".join(self.shortest_expansions.get(t, t) for t in middle_alt)
-
-        cycle_alternative = self.rules[rule_name][alt_index]
-        closing_token = next((t for t in cycle_alternative if t in cycle), None)
-        if closing_token is None: return []
-        closing_token_index = cycle_alternative.index(closing_token)
-        
-        left = " ".join(self.shortest_expansions.get(t, t) for t in cycle_alternative[:closing_token_index])
-        right = " ".join(self.shortest_expansions.get(t, t) for t in cycle_alternative[closing_token_index+1:])
-
-        # 2. Generate all (prefix, suffix) pairs for the path
-        # A state is a tuple: (prefix_tokens, suffix_tokens)
-        expansion_states = [([], [])]
-
-        # Iterate over the path segments (rule -> alt -> next_rule)
-        for i in range(0, len(path_to_cycle) - 2, 2):
-            rule_name = path_to_cycle[i]
-            alt_node = path_to_cycle[i+1]
-            next_rule_on_path = path_to_cycle[i+2]
-
-            _, alt_index_str = alt_node.split(':')
-            alt_index = int(alt_index_str)
-            alternative = self.rules[rule_name][alt_index]
-
-            # Find all occurrences of the next rule in this alternative
-            indices = [i for i, token in enumerate(alternative) if token == next_rule_on_path]
-            
-            new_states = []
-            # For each previous state, create new branches for each occurrence
-            for prev_prefix, prev_suffix in expansion_states:
-                for index in indices:
-                    # Tokens from the current alternative that are not the next step on the path
-                    # need to be expanded to their shortest form.
-                    
-                    # Prefix part from this level
-                    local_prefix = [self.shortest_expansions.get(t, t) for t in alternative[:index]]
-                    
-                    # Suffix part from this level
-                    local_suffix = [self.shortest_expansions.get(t, t) for t in alternative[index+1:]]
-
-                    # Combine with previous state
-                    new_prefix = prev_prefix + local_prefix
-                    new_suffix = local_suffix + prev_suffix
-                    
-                    new_states.append((new_prefix, new_suffix))
-            
-            expansion_states = new_states
-
-        # 3. Create a final template for each expanded state
-        templates = []
-        for prefix_tokens, suffix_tokens in expansion_states:
-            prefix = " ".join(prefix_tokens).strip()
-            if prefix: prefix += " "
-            
-            left_str = left.strip()
-            if left_str: left_str += " "
-            
-            middle_str = middle.strip()
-            if middle_str: middle_str += " "
-            
-            right_str = right.strip()
-            if right_str: right_str += " "
-
-            suffix = " ".join(suffix_tokens).strip()
-            templates.append(QueryTemplate(prefix, left_str, middle_str, right_str, suffix))
-        
-        return templates
-
-    def _find_shortest_non_cyclic_alternative(self, rule_name: str, cycle: List[str]) -> List[str]:
-        shortest_alt = None
-        shortest_len = float('inf')
-        for i, alternative in enumerate(self.rules[rule_name]):
-            alt_node_name = f"{rule_name}:{i}"
-            if alt_node_name not in cycle:
-                # A simple heuristic for "shortest"
-                if len(alternative) < shortest_len:
-                    shortest_len = len(alternative)
-                    shortest_alt = alternative
-        return shortest_alt if shortest_alt is not None else []
