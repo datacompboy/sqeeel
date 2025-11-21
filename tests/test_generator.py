@@ -63,6 +63,17 @@ class TestQueryGenerator(unittest.TestCase):
         
         self.assertSetEqual(set(templates), expected_templates)
 
+    def test_generate_templates_recursive(self):
+        generator = QueryGenerator('tests/recursive_sample.y', max_cycle_length=10)
+        templates = generator.generate_templates('stmt')
+        print("Recursive test templates:", templates)
+        
+        expected_templates = {
+             QueryTemplate(prefix='PREFIX ', left='{ ( [ ', middle='{ ( MIDDLE ) } ', right='] ) } ', suffix='SUFFIX'),
+        }
+        
+        self.assertSetEqual(set(templates), expected_templates)
+
     def test_generate_templates_multiple_paths(self):
         generator = QueryGenerator('tests/sample.y', max_cycle_length=10)
         templates = generator.generate_templates('selectExpr')

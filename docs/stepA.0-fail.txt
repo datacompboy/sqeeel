@@ -1,0 +1,34 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, implementing only Postgresql one for now.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - squeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+Somehow the generation of the templates based on postgres grammar lead to generation completely incorrect template: the one where both left and right are empty:
+
+```
+('SELECT     WHERE JSON_SERIALIZE ( ', '', '', '', ')')
+```
+
+Please investigate what lead to that situation, how to fix it, and add an regression unit-test to prevent reoccurrence in the future.
+The grammar is available in grammars/pg19gram.y but avoid reading the file as it huge (500kb).
+
+The templates were generated with command
+
+```
+python3 -m sqeeel.main generate-templates --db-type postgres grammars/pg19gram.y SelectStmt templates.json
+```
+
+You already created minimal reproduction in @tests/test_repro.py using grammar @tests/repro_issue.y
+
+Please analyze the template generation logic to find out why is that possible and find the fix.
+
+The construction algo described in @docs/step5.txt and @docs/step5.1.txt
+
+According to the intended construction algo, it should not be possible to get simultaneously empty left and right, since every loop is non-empty, thus it should at least produce at least single token for at least left or right.

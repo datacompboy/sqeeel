@@ -1,0 +1,87 @@
+This is a database stress-testing application on python.
+Designed to be adaptable to multiple database engines. Currently experimenting with Postgresql.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - squeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+The grammar query_generator was implemented with flawed logic and you were unable to fix it.
+Let's take a step back and rewrite it from the scratch.
+
+High-level goal is:
+  The query template generator should convert grammar into templates that can be scaled in a way that each size produces grammar-valid query.
+
+The example (that currently is failing):
+
+    ```
+    %%
+    stmt: 'PREFIX' A 'SUFFIX';
+    A: '{' B '}' ;
+    B: '(' C ')' ;
+    C: '[' A ']' | 'MIDDLE' ;
+    ```
+
+The example queries that are valid according to the grammar:
+
+    ```
+    PREFIX { ( MIDDLE ) }
+    PREFIX { ( [ { ( MIDDLE ) } ] ) }
+    PREFIX { ( [ { ( [ { ( MIDDLE ) } ] ) } ] ) }
+    ```
+
+Thus, query templates generator should construct the following template:
+
+    ```
+    QueryTemplate(prefix='PREFIX ', left='{ ( [', middle='{ ( MIDDLE ) } ', right='] ) } ', suffix='SUFFIX')
+    ```
+
+The goal is to rewrite existing generator to follow the following algorithm:
+
+  1. Find all the cycles, and then run for each cycle the following.
+        (this grammar has only one cycle: `A => A:0 => B => B:0 => C => C:0 => (implicit)A`)
+
+  2. Find the shortest path from the root to the cycle:
+            (from stmt to the loop there are three paths: `
+                stmt => stmt:0 => A
+                stmt => stmt:0 => A => A:0 => B
+                stmt => stmt:0 => A => A:0 => B => B:0 => C
+            `)
+       - get length of the shortest path from the root to each of the cycle tokens
+       - choose the one that the shortest
+            (the `stmt:0 => A`)
+       - rotate the cycle that way, that the node that makes the path shortest is the first in the cycle.
+            (the cycle is `A => A:0 => B => B:0 => C => C:0 => (implicit)A`)
+
+  Keep in mind that the cycle and the path are "critical way points", not the whole list of the tokens!
+
+  At this point, from cycle and from the root-to-the-loop path we remove all non-alternative nodes
+  (i.e. work with only `stmt:0` shortest path and `A:0 => B:0 => C:0` loop, with `A` being implicit next step for both path and for the loop)
+
+  3. Every individual possible root-to-the-loop expansions are produce separate template.
+        (in this case, there is only one, but in cases like `stmt: term op term` the path stmt => term has two alternatives, with first "term" and the second "term")
+
+     The expansion from A:0 to B:0 means, that we take node A, 0th alternative, and check each node in the alternative list:
+         - find all entries of next-in-the-path node (i.e. when we work for A:0=>B:0 we find every B node in the alternative list) -- each of them will produce individual template result;
+         - convert terminals by calling the grammar-specific rewriter like current generator do;
+         - all non-terminals that are not next-in-the-path OR next-in-the-path that is not current -- get replaced with their shortest possible terminal-only form.
+
+     The expansion of the path above will produce:
+        ['PREFIX', 'A', 'SUFFIX']
+     
+     From this expanded path everything before the current loop entry node goes to the prefix (here: `['PREFIX']`) for the result,
+     everything else after goes to the suffix (here: `['SUFFIX']`) and shortest terminal-only expansion of the loop entry node goes
+     to the middle (here it should be `['{', '(', 'MIDDLE', ')', '}']`).
+
+  4. The loop needs to be expanded exactly in the same way: expanded exactly same from the node to node,
+     every time choosing one of the available "next node" in the current alternative, since every node along the way may have multiple entries of it.
+     the produced loop expansion in the case should became:
+        `['{', '(', '[', 'A', ']', ')', '}']`
+     and in the similar manner as above, the parts before the loop entry node goes to the 'left': `['{', '(', '[']`;
+     nodes after goes to the 'right': `[']', ')', '}']`.
+     The middle node point ('A') in this case just discarded as it is the same value for the middle as before.
+
+The important part is to correctly process each possible "next node" position during the path expansion to correctly produce all possible individual templates at each expansion step along the path.
