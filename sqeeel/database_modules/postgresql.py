@@ -96,6 +96,7 @@ class PostgresModule(DatabaseModule):
             "BareColLabel": "x$",
             "Sconst": '"1"',
             "Iconst": "0",
+            "ICONST": "0",
             "FCONST": "0",
             "BCONST": 'b"0"',
             "XCONST": 'x"0"',
