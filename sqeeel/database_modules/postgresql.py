@@ -75,6 +75,7 @@ class PostgresModule(DatabaseModule):
             "DOT_DOT": "..",
             "COLON_EQUALS": ":=",
             "NOT_LA": "NOT",
+            "WITH_LA": "WITH",
         }
         if token in replacements:
             return replacements[token]
