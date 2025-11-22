@@ -36,6 +36,14 @@ def setup_logging(args):
         file_handler.setLevel(logging.DEBUG) # Log everything interesting
         handlers.append(file_handler)
 
+    # Stats file handler
+    if not args.nostats:
+        stats_handler = logging.FileHandler(args.stats)
+        stats_formatter = logging.Formatter('%(asctime)s - %(message)s')
+        stats_handler.setFormatter(stats_formatter)
+        stats_handler.setLevel(logging.WARNING)
+        handlers.append(stats_handler)
+
     logging.basicConfig(
         level=logging.INFO,
         handlers=handlers
@@ -244,6 +252,16 @@ def main():
         "--nolog",
         action="store_true",
         help="Disable file logging."
+    )
+    stress_parser.add_argument(
+        "--stats",
+        default="stats.log",
+        help="Stats log file path."
+    )
+    stress_parser.add_argument(
+        "--nostats",
+        action="store_true",
+        help="Disable stats file logging."
     )
 
     # Dynamic module args

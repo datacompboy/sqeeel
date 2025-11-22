@@ -1,0 +1,5 @@
+The @sqeeel/main.py set ups two logging streams right now:
+- to the `run.log` file, configured by either --log or --nolog flag with everything (DEBUG level)
+- to the console, using either WARNING or INFO level, based on "-v" flag.
+
+Please add also logging to stats.log file, configured via --stats or --nostats, by logging there everything at WARNING level.

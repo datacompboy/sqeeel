@@ -140,6 +140,9 @@ class StressEngine:
             intervals = new_intervals
             if not merged:
                 break
+        logging.warning(f"Stress results for template {template}:")
+        for interval in intervals:
+            logging.warning(f"  {interval['begin']} - {interval['end']}: {interval['effect']}")
         return intervals, stats
 
 
