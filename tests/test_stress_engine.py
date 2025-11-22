@@ -7,6 +7,7 @@ class MockResult:
     exit_code: int
     stderr: str
     duration: float
+    status: str
 
 class MockExecutor:
     def __init__(self):
@@ -20,7 +21,7 @@ class MockExecutor:
 
     def run_query(self, query: str):
         self.calls.append(query)
-        return MockResult(exit_code=0, stderr="", duration=0.1)
+        return MockResult(exit_code=0, stderr="", duration=0.1, status="success")
 
 class TestStressEngine(unittest.TestCase):
     def test_multiple_templates_execution(self):

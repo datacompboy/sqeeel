@@ -183,6 +183,13 @@ def main():
         help="Database type module to use",
     )
     
+    stress_parser.add_argument(
+        "--query-timeout",
+        type=float,
+        default=10.0,
+        help="Query execution timeout in seconds (default: 10s).",
+    )
+
     # Template selection
     stress_parser.add_argument(
         "--templates-source",

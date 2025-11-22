@@ -6,7 +6,7 @@ from sqeeel.database_modules.docker_db import DockerExecutor
 class TestPostgresErrorNormalization(unittest.TestCase):
     def setUp(self):
         self.module = PostgresModule()
-        self.args = argparse.Namespace(db_image="postgres:latest")
+        self.args = argparse.Namespace(db_image="postgres:latest", query_timeout=10.0)
         self.executor = self.module.create_executor(self.args)
 
     def test_executor_has_normalizer(self):

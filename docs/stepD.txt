@@ -1,0 +1,46 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, implementing only Postgresql one for now.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory, runnable by
+    `python3 -m unittest discover tests`
+   or specific test via
+    `python3 -m tests.test_stress_engine`
+
+Some queries are too slow to execute, and wait for completion is infeasible.
+Additionally, if the query does not respond to the cancellation, that's a serious bug as "query hang".
+
+We need to add a support for timeout detection, cancellation, checking the cancellation status and recovery:
+- We should add configurable query-timeout argument to the main application, by default set to 10 seconds;
+- The timeout should only be counted as query execution time, NOT counting the query generation from a template;
+- Database execution interface should provide generic AND ability to override the cancellation and checking logics;
+- Current query execution may try to rely on timeout flag for proc.communicate to catch the timeout condition;
+- Default behaviour for handling the timeout for now should be:
+    - calling database-specific query termination function;
+        fallback action: proc.kill, if the query termination function is not provided
+    - waiting for 2 seconds
+    - then calling database-specific "is query still alive" function
+        fallback action: check proc status, and if it finished it work we consider successfully terminated.
+- If query timeout happened and termination correctly handled, the query execution result is 'timeout'
+- If query timeout happened but termination was NOT correctly handled (i.e. query is still alive), the query
+  execution result is 'hang'. You need to design how exactly pass these status via ExecResult and make sure that
+  @sqeeel/stress_engine/engine.py correctly handles that.
+- For the PostgreSQL, we can try to rely on default proc.kill fallback action, so no override necessary (yet).
+- For the PostgreSQL, to detect "is query still alive" we should execute a query and check the response:
+    "SELECT COUNT(1) FROM pg_stat_activity WHERE state='active' and pid != pg_backend_pid()"
+  if we use "psql --csv" as an execution, we could simply check stdout of the query to be "count\n0\n".
+  If the result is non-zero, the query is hang.
+  If we can't run the query, the server is unhealthy, result is "crash"
+- For the PostgreSQL, the result of query of 'server closed the connection unexpectedly\n' should be
+  treated as server crash.
+
+If hang or crash is detected, the default recovery should be: stop and then start database after and check for being success.
+If it does not recover, the stress-testing process terminates.
+
+Ask the user along to run tests to check is timeout and crash detection is successful.

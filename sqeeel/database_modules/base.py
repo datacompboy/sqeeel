@@ -5,12 +5,25 @@ from typing import Generic, TypeVar, TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from sqeeel.query_generator.generator import QueryGenerator
 
+class ExecutionStatus:
+    SUCCESS = "success"
+    TIMEOUT = "timeout"
+    HANG = "hang"
+    CRASH = "crash"
+    ERROR = "error"
+
+
 @dataclass(kw_only=True)
 class ExecResult:
     """
     Base class for execution results.
     """
+    status: str = ExecutionStatus.SUCCESS
     error_message: Optional[str] = None
+    duration: float = 0.0
+    exit_code: Optional[int] = None
+    stdout: str = ""
+    stderr: str = ""
 
 
 T = TypeVar("T", bound=ExecResult)

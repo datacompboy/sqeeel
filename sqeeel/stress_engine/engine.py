@@ -3,6 +3,7 @@ Stress engine.
 """
 import logging
 from ..template_instantiator.instantiator import TemplateInstantiator
+from ..database_modules.base import ExecutionStatus
 
 
 class StressEngine:
@@ -22,19 +23,39 @@ class StressEngine:
         """
         if result is None:
             return "too-big", ""
+        
+        if result.status == ExecutionStatus.TIMEOUT:
+            return "timeout", ""
+        if result.status == ExecutionStatus.HANG:
+            return "hang", ""
+        if result.status == ExecutionStatus.CRASH:
+            return "crash", ""
+
         if result.exit_code == 0:
             return "success", ""
         # This is a simplification. A real implementation would have more
         # sophisticated error classification.
-        if "timeout" in result.stderr.lower():
-            return "timeout", ""
-        if result.exit_code < 0:
+        if result.exit_code is not None and result.exit_code < 0:
             return "crash", ""
         
         error_msg = getattr(result, "error_message", None)
         if not error_msg:
             error_msg = result.stderr[:100]
         return "error", error_msg
+
+    def _recover_database(self):
+        """
+        Recovers the database by restarting it.
+        """
+        logging.warning("Attempting database recovery...")
+        try:
+            self.db_module.stop()
+            self.db_module.start()
+            self.db_module.wait_for_ready()
+            logging.warning("Database recovered successfully.")
+        except Exception:
+            logging.exception("Failed to recover database.")
+            raise RuntimeError("Database recovery failed.")
 
     def _run_query_for_size(self, instantiator, size, stats):
         """
@@ -56,6 +77,9 @@ class StressEngine:
         result = self.db_module.run_query(query)
         stats[size] = result
         
+        if result.status in [ExecutionStatus.HANG, ExecutionStatus.CRASH]:
+            self._recover_database()
+
         effect = self._get_effect(result)
         logging.info(f"  Finished in {result.duration:.4f}s. Effect: {effect}")
         logging.debug(f"    Full run stats: {result}")

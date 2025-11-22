@@ -9,14 +9,14 @@ class TestQueryGeneratorPostgres(unittest.TestCase):
 
     def test_grammar_token_rewriter(self):
         # Test simple replacements
-        self.assertEqual(self.pg_module._grammar_token_rewriter("equals_greater"), "=>")
-        self.assertEqual(self.pg_module._grammar_token_rewriter("less_equals"), "<=")
-        self.assertEqual(self.pg_module._grammar_token_rewriter("greater_equals"), ">=")
-        self.assertEqual(self.pg_module._grammar_token_rewriter("less_greater"), "<>")
-        self.assertEqual(self.pg_module._grammar_token_rewriter("not_equals"), "!=")
-        self.assertEqual(self.pg_module._grammar_token_rewriter("typecast"), "::")
-        self.assertEqual(self.pg_module._grammar_token_rewriter("dot_dot"), "..")
-        self.assertEqual(self.pg_module._grammar_token_rewriter("colon_equals"), ":=")
+        self.assertEqual(self.pg_module._grammar_token_rewriter("EQUALS_GREATER"), "=>")
+        self.assertEqual(self.pg_module._grammar_token_rewriter("LESS_EQUALS"), "<=")
+        self.assertEqual(self.pg_module._grammar_token_rewriter("GREATER_EQUALS"), ">=")
+        self.assertEqual(self.pg_module._grammar_token_rewriter("LESS_GREATER"), "<>")
+        self.assertEqual(self.pg_module._grammar_token_rewriter("NOT_EQUALS"), "!=")
+        self.assertEqual(self.pg_module._grammar_token_rewriter("TYPECAST"), "::")
+        self.assertEqual(self.pg_module._grammar_token_rewriter("DOT_DOT"), "..")
+        self.assertEqual(self.pg_module._grammar_token_rewriter("COLON_EQUALS"), ":=")
         
         # Test suffix removal
         self.assertEqual(self.pg_module._grammar_token_rewriter("IF_P"), "IF")
@@ -52,7 +52,7 @@ class TestQueryGeneratorPostgres(unittest.TestCase):
                   ;
         
         item : SELECT Iconst ;
-        other : CHECK equals_greater Sconst ;
+        other : CHECK EQUALS_GREATER Sconst ;
         
         REMOVE_ME : 'foo' ;
         """
@@ -64,7 +64,7 @@ class TestQueryGeneratorPostgres(unittest.TestCase):
         
         # Iconst -> 0
         # Sconst -> "1"
-        # equals_greater -> =>
+        # EQUALS_GREATER -> =>
         # END -> END (not rewritten)
         # SELECT -> SELECT
         # CHECK -> CHECK
