@@ -168,7 +168,7 @@ class MariaDBModule(DatabaseModule):
 
     def _get_removed_rules(self) -> List[str]:
         # Rules to exclude from generation
-        return ["ident", "table_ident"]
+        return ["ident", "table_ident", "opt_table_alias_clause"]
 
     def _template_token_rewriter(self, token: str) -> str:
         replacements = {
@@ -176,5 +176,6 @@ class MariaDBModule(DatabaseModule):
             "table_ident": "x",
             "IDENT": "x",
             "NUM": "0",
+            "opt_table_alias_clause": "x$",
         }
         return replacements.get(token, token)
