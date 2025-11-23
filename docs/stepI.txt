@@ -1,0 +1,15 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engine for Postgresql and engine for MariaDB is in progress.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+
+The stress engine has max_query_size argument which is not exposed to the stress runner command line.
+Please expose it (with the same default of 32mb as before).

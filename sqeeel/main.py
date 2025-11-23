@@ -153,7 +153,7 @@ def run_stress_test(args):
         
         logging.info(f"Running stress test with {len(templates)} templates.")
 
-        stress_engine = StressEngine(executor, templates, verbose=args.verbose)
+        stress_engine = StressEngine(executor, templates, max_query_size=args.max_query_size, verbose=args.verbose)
         
         results = stress_engine.run()
 
@@ -201,6 +201,12 @@ def main():
         type=float,
         default=10.0,
         help="Query execution timeout in seconds (default: 10s).",
+    )
+    stress_parser.add_argument(
+        "--max-query-size",
+        type=int,
+        default=32 * 1024 * 1024,
+        help="Maximum query size in bytes (default: 32MB).",
     )
 
     # Template selection
