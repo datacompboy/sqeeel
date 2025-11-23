@@ -44,8 +44,13 @@ def setup_logging(args):
         stats_handler.setLevel(logging.WARNING)
         handlers.append(stats_handler)
 
+    # Determine root logger level based on handlers
+    root_level = logging.INFO
+    if not args.nolog:
+        root_level = logging.DEBUG
+
     logging.basicConfig(
-        level=logging.INFO,
+        level=root_level,
         handlers=handlers
     )
 
