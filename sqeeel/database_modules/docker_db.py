@@ -192,7 +192,12 @@ class DockerExecutor(Executor[DockerExecResult]):
         error_message = None
         
         if status == ExecutionStatus.SUCCESS:
-            if self.crash_detector and self.crash_detector(stdout, stderr):
+            if "Error response from daemon:" in stderr and "is not running" in stderr:
+                raise RuntimeError(f"Critical Docker failure: {stderr.strip()}")
+
+            if exit_code == 137:
+                status = ExecutionStatus.CRASH
+            elif self.crash_detector and self.crash_detector(stdout, stderr):
                 status = ExecutionStatus.CRASH
 
             if exit_code != 0:

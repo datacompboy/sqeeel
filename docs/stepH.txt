@@ -1,0 +1,25 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engine for Postgresql and engine for MariaDB is in progress.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+
+We need to refine crash handling requirement for the MariaDB. Here is the log entry from a query that causes server to crash:
+
+2025-11-23 21:17:31,455 -   Finished in 6.1801s. Effect: ('error', '')
+2025-11-23 21:17:31,455 -     Full run stats: DockerExecResult(status='success', error_message='', duration=6.180135850001534, exit_code=137, stdout='', stderr='')
+2025-11-23 21:17:31,756 -   Running query for size 887500 (query size: 17638914 bytes)...
+2025-11-23 21:17:31,850 -   Finished in 0.0937s. Effect: ('error', 'Error response from daemon: container 284e57d94228c114d0ae9d02d84a15064f93486f96b25cca75679dce200089bf is not running\n')
+2025-11-23 21:17:31,850 -     Full run stats: DockerExecResult(status='success', error_message='Error response from daemon: container 284e57d94228c114d0ae9d02d84a15064f93486f96b25cca75679dce200089bf is not running\n', duration=0.09369394500026829, exit_code=1, stdout='', stderr='Error response from daemon: container 284e57d94228c114d0ae9d02d84a15064f93486f96b25cca75679dce200089bf is not running\n')
+
+Which suggests we need to handle it in a two ways:
+    1. exit_code=137 from the client suggests the docker container was closed due to server crash
+    2. If "Error response from daemon: container ... is not running" error message is received, that's a generic failure condition that required exception and stop processing.
+       The condition normally should not be met (i.e. recovery process should handle this gracefully), so if we received this, recovery process is broken, no reason to continue.
