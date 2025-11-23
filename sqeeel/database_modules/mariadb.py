@@ -21,7 +21,7 @@ class MariaDBModule(DatabaseModule):
         return DockerExecutor(
             image_name=args.db_image,
             container_name="sqeeel-test-db-mariadb",
-            client_command=["mariadb", "-u", "root", "-pmysecretpassword", "-D", "testdb"],
+            client_command=["mariadb", "-u", "root", "-pmysecretpassword", "-D", "testdb", "-B", "--skip-print-query-on-error"],
             env={
                 "MARIADB_ROOT_PASSWORD": "mysecretpassword",
                 "MARIADB_DATABASE": "testdb"
@@ -65,8 +65,8 @@ class MariaDBModule(DatabaseModule):
         lines = stderr.splitlines(keepends=True)
         first_line = lines[0] if lines else ""
         
-        # Replace text inside of the double-quotes with three dots (similar to postgres, might need tuning)
-        return re.sub(r'"[^"]*"', '"..."', first_line)
+        # Replace text inside of the single-quotes with three dots
+        return re.sub(r"'[^']*'", "'...'", first_line)
 
     def create_query_generator(self, grammar_file: str, max_cycle_length: int):
         return QueryGenerator(
