@@ -1,0 +1,37 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, implementing only Postgresql one for now.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+Now it is time to implement specification for MariaDB.
+Please provide the plan and ask for the clarification when necessary.
+Plan for gradual implementation with human input where you lack the information.
+Do not read contents of files in grammars/ directory as they are supposed to be huge (500kb).
+
+I've placed grammars/mariadb12.yy file with the grammar, it's in the YACC format, but that should be mostly compatible with bison parser. The file is huge (624Kb), do not read it directly.
+
+Use mariadb:latest (which is the latest 12.1, matching the grammar).
+
+We can use "select" as an initial rule in the grammar.
+
+The operators to rewrite:
+  AND_AND_SYM => "&&"
+  DOT_DOT_SYM => ".."
+  EQUAL_SYM => "="
+  GE => ">="
+  LE => "<="
+  MYSQL_CONCAT_SYM => "||"
+  NOT2_SYM => "!!"
+  OR2_SYM => "||"
+  SHIFT_LEFT => "<<"
+  SHIFT_RIGHT => ">>"
+  ARROW_SYM => "->"
+
+For others, on the rewrite rules, for MariaDB we should remove "_SYM" suffix from tokens (e.g. `SELECT_SYM` is just a `SELECT` token).

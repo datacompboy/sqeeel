@@ -4,10 +4,12 @@ This package will contain database-specific modules.
 from .base import ExecResult, Executor, DatabaseModule
 from .docker_db import DockerExecutor
 from .postgresql import PostgresModule
+from .mariadb import MariaDBModule
 
 _MODULES = {
     m.name: m for m in [
         PostgresModule(),
+        MariaDBModule(),
     ]
 }
 
