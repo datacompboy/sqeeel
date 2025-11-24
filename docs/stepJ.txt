@@ -1,0 +1,116 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engine for Postgresql and engine for MariaDB is in progress.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+
+Right now both postgres and mariadb modules relies on the docker executor, and thus we have an issue with quality of hang queries detection.
+The issue come from the fact that proc.kill() for the executor that is running via "docker exec" does not send SIGINT signal to the client.
+
+We need to do three things here:
+
+1. Create "client cancel" function.
+   Default action: proc.send_signal() with SIGINT (CTRL_C_EVENT)
+   But the docker-based executor should do it this way:
+    - Instead of proc.kill we should run "docker exec ${container} kill -SIGINT ${clientpid}".
+      It is a bit tricky to get the PID of the application inside of the container, since the `proc` we have is a pid of the docker client.
+
+      I think, with some use of psutil python module to list thru the processes available.
+      With "docker inspect" call for the container we ran we could get the PID of the process inside, get its PPid,
+      and then walk thru its descendants to find the process with the client application we ran.
+
+      Out of this process, we need to get NSpid thru process status.
+      
+      For example: 
+
+      ```
+      $ docker inspect -f '{{.State.Pid}}' mari
+      516040
+      $ cat /proc/516040/status | grep PPid:
+      PPid:   516020
+      $ grep "PPid:   516020" /proc/*/status
+      /proc/516040/status:PPid:       516020
+      /proc/524212/status:PPid:       516020
+      $ head -n 15 /proc/524212/status
+      Name:   mariadb
+      Umask:  0022
+      State:  S (sleeping)
+      Tgid:   524212
+      Ngid:   0
+      Pid:    524212
+      PPid:   516020
+      TracerPid:      0
+      Uid:    999     999     999     999
+      Gid:    999     999     999     999
+      FDSize: 64
+      Groups: 999
+      NStgid: 524212  209
+      NSpid:  524212  209
+      NSpgid: 524212  209
+      ```
+
+      The container mari has 516040 as main application, it has 516020 parent pid.
+      At the moment two processes run with this parent, and 524212 the one that runs "mariadb" (client).
+      This client run with in-docker pid 209.
+
+      That means we can send termination signal with "docker exec mari kill -SIGINT 209"
+
+2. We create "server cancel" function.
+   Default action: log warning (no server-side cancellation available).
+
+   We change query health check function signature that instead of boolean it should return string with query id.
+   Empty string means no query is running.
+   Accordingly, instead of COUNT() we should use corresponding query that will return id and we parse the answer.
+
+    For the MariaID:
+      SELECT id FROM information_schema.processlist WHERE command != 'Sleep' AND id != CONNECTION_ID();
+    For the PostgreSQL:
+      SELECT pid FROM pg_stat_activity WHERE state='active' and pid != pg_backend_pid();
+   
+   Add the database-specific server cancel is to send the query:
+      MariaID: KILL QUERY $id
+      PostgreSQL: SELECT pg_cancel_backend($pid)
+
+3. Now, the termination logic / hang detection should be the following:
+   - Call client-cancel function.
+     then do proc.wait() with up to 2 seconds timeout.
+   - Then we call function to get currently running query Id.
+     if it empty: all good, query was just in status 'timeout'.
+     otherwise: the query is at least in 'client-hung' state and we go deeper:
+    - We call server-side cancel function.
+      then we sleep for 2 seconds.
+    - Then we call function to get currently running query Id.
+      if it empty: the 'client-hung' is the final state, no recovery needed.
+      if it non-empty: the 'server-hung' is the query final state, and we should do server recovery (stop/wait/start procedure).
+
+>>>>>>
+
+Please introduce separate status for "client-hang" situation; you reused timeout right now, but it is actually different state, interesting on its own.
+
+>>>>>>
+
+The change actually broke crash detection, especially when crash happened during "time.sleep"...
+That lead to "Critical Docker failure" because next command can't run since container was dead.
+I think, it worth to add check for docker health before return the result status -- if container is dead, it is no longer hang or timeout, it's crash.
+
+Or, maybe, you have another idea?
+
+>>>>>>
+
+According to log;
+2025-11-24 19:05:38,990 -   Running query for size 54994 (query size: 1473751 bytes)...
+2025-11-24 19:05:51,635 -   Finished in 12.6451s. Effect: ('timeout', '')
+
+According to kernel log:
+2025-11-24T19:05:48.735451+01:00 NUUBOX kernel: WSL (615378 - CaptureCrash): Capturing crash for pid: 1, executable: !usr!sbin!mariadbd, signal: 11, port: 50005
+2025-11-24T19:05:51.724460+01:00 NUUBOX systemd[1]: docker-d2525553a09d3f89d56403ed43e6fb52fad8c79d2a243e19b4cd9792948963d2.scope: Deactivated successfully.
+
+This means, while crash happened during the sleep, at the end of the hang detection the docker container it self is not yet fully closed -- but the server was already unavailable.
+I believe, the running thread id handlers should return empty string or query id only on successful call; but inability to run the query shouold be treated as crash.

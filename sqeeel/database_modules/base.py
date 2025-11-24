@@ -9,6 +9,7 @@ class ExecutionStatus:
     SUCCESS = "success"
     TIMEOUT = "timeout"
     HANG = "hang"
+    CLIENT_HANG = "client-hang"
     CRASH = "crash"
     ERROR = "error"
 

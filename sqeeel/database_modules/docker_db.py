@@ -1,5 +1,7 @@
 import subprocess
 import time
+import psutil
+import os
 from dataclasses import dataclass
 from typing import List, Optional, Callable
 
@@ -30,7 +32,8 @@ class DockerExecutor(Executor[DockerExecResult]):
         init_queries: Optional[List[str]] = None,
         timeout: Optional[float] = None,
         terminate_query_callback: Optional[Callable[[subprocess.Popen], None]] = None,
-        is_query_alive_callback: Optional[Callable[["DockerExecutor"], bool]] = None,
+        is_query_alive_callback: Optional[Callable[["DockerExecutor"], Optional[str]]] = None,
+        server_cancel_callback: Optional[Callable[["DockerExecutor", str], None]] = None,
         crash_detector: Optional[Callable[[str, str], bool]] = None,
     ):
         """
@@ -46,7 +49,8 @@ class DockerExecutor(Executor[DockerExecResult]):
         :param init_queries: A list of queries to run after the database is ready.
         :param timeout: The timeout for query execution in seconds.
         :param terminate_query_callback: Callback to terminate the query (takes proc).
-        :param is_query_alive_callback: Callback to check if query is alive (takes self).
+        :param is_query_alive_callback: Callback to check if query is alive (takes self, returns ID).
+        :param server_cancel_callback: Callback to cancel query on server (takes self, ID).
         :param crash_detector: Callback to detect crash from stdout/stderr.
         """
         self.image_name = image_name
@@ -59,6 +63,7 @@ class DockerExecutor(Executor[DockerExecResult]):
         self.timeout = timeout
         self.terminate_query_callback = terminate_query_callback
         self.is_query_alive_callback = is_query_alive_callback
+        self.server_cancel_callback = server_cancel_callback
         self.crash_detector = crash_detector
         self._container_id: Optional[str] = None
 
@@ -119,10 +124,70 @@ class DockerExecutor(Executor[DockerExecResult]):
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         stdout, stderr = proc.communicate(input=input_text)
         if proc.returncode != 0:
-             # Can't easily differentiate why it failed, just return output for now or raise?
-             # For checking logic, we might want the output.
-             pass
+             raise subprocess.CalledProcessError(proc.returncode, cmd, output=stdout, stderr=stderr)
         return stdout
+
+    def _get_nspid(self, pid: int) -> Optional[int]:
+        try:
+            with open(f"/proc/{pid}/status", "r") as f:
+                for line in f:
+                    if line.startswith("NSpid:"):
+                        # Format: NSpid:  524212  209
+                        parts = line.split()
+                        return int(parts[-1])
+        except Exception:
+            pass
+        return None
+
+    def _is_container_running(self) -> bool:
+        try:
+             cmd = ["docker", "inspect", "-f", "{{.State.Running}}", self.container_name]
+             out = subprocess.check_output(cmd, text=True).strip()
+             return out == "true"
+        except subprocess.CalledProcessError:
+             return False
+
+    def _client_cancel(self):
+        """
+        Sends SIGINT to the process inside the container.
+        """
+        try:
+            # 1. Get container main PID
+            cmd = ["docker", "inspect", "-f", "{{.State.Pid}}", self.container_name]
+            container_pid_str = subprocess.check_output(cmd, text=True).strip()
+            container_pid = int(container_pid_str)
+
+            # 2. Get PPid of container process (shim)
+            try:
+                p = psutil.Process(container_pid)
+                shim_pid = p.ppid()
+            except psutil.NoSuchProcess:
+                return
+
+            # 3. Find siblings (children of shim) that match our client
+            client_proc_name = os.path.basename(self.client_command[0])
+            
+            target_pid = None
+            shim_proc = psutil.Process(shim_pid)
+            for child in shim_proc.children(recursive=False):
+                if child.pid == container_pid:
+                    continue
+                
+                try:
+                    # Match command name. Note: this is a heuristic.
+                    if child.name() == client_proc_name:
+                         target_pid = child.pid
+                         break
+                except psutil.NoSuchProcess:
+                    continue
+
+            if target_pid:
+                nspid = self._get_nspid(target_pid)
+                if nspid:
+                    subprocess.run(["docker", "exec", self.container_name, "kill", "-SIGINT", str(nspid)],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
 
     def run_query(self, query: str) -> DockerExecResult:
         """
@@ -149,28 +214,45 @@ class DockerExecutor(Executor[DockerExecResult]):
             stdout, stderr = proc.communicate(input=query, timeout=self.timeout)
             exit_code = proc.returncode
         except subprocess.TimeoutExpired:
-            # 1. Terminate
+            # 1. Client cancel
             if self.terminate_query_callback:
                 self.terminate_query_callback(proc)
             else:
-                proc.kill()
+                self._client_cancel()
             
             # 2. Wait
             time.sleep(2)
             
-            # 3. Check alive
+            # 3. Check currently running query Id
+            query_id = None
             try:
-                is_alive = False
                 if self.is_query_alive_callback:
-                    is_alive = self.is_query_alive_callback(self)
-                else:
-                    # Fallback: check if process is still running
-                    is_alive = (proc.poll() is None)
+                    query_id = self.is_query_alive_callback(self)
                 
-                if is_alive:
-                    status = ExecutionStatus.HANG
-                else:
+                if not query_id:
+                    # All good, query was just in status 'timeout'
                     status = ExecutionStatus.TIMEOUT
+                else:
+                    # The query is at least in 'client-hung' state
+                    # 4. Server-side cancel
+                    if self.server_cancel_callback:
+                        self.server_cancel_callback(self, query_id)
+                    
+                    # 5. Sleep for 2 seconds
+                    time.sleep(2)
+                    
+                    # 6. Check currently running query Id again
+                    query_id_after = None
+                    if self.is_query_alive_callback:
+                        query_id_after = self.is_query_alive_callback(self)
+                    
+                    if not query_id_after:
+                         # 'client-hung' is the final state, no recovery needed.
+                         status = ExecutionStatus.CLIENT_HANG
+                    else:
+                         # 'server-hung' is the query final state
+                         status = ExecutionStatus.HANG
+
             except Exception:
                  status = ExecutionStatus.CRASH
 
@@ -185,6 +267,9 @@ class DockerExecutor(Executor[DockerExecResult]):
             except ValueError:
                 # file might be closed
                 pass
+            
+            if not self._is_container_running():
+                status = ExecutionStatus.CRASH
 
         end_time = time.monotonic()
         duration = end_time - start_time

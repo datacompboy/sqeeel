@@ -27,21 +27,29 @@ class PostgresModule(DatabaseModule):
             init_queries=["CREATE TABLE IF NOT EXISTS x(x int)"],
             timeout=args.query_timeout,
             is_query_alive_callback=self._is_query_alive,
+            server_cancel_callback=self._server_cancel,
             crash_detector=self._crash_detector
         )
 
-    def _is_query_alive(self, executor: DockerExecutor) -> bool:
-        # Run a query to check if there are any active queries (excluding the check query itself if possible,
-        # but pg_backend_pid() handles that for the current session).
-        # We assume single threaded execution so any other active query is the "hanging" one.
+    def _is_query_alive(self, executor: DockerExecutor) -> Optional[str]:
+        # Run a query to check if there are any active queries
         cmd = [
-            "psql", "-U", "postgres", "-d", "postgres", "--csv", "-c",
-            "SELECT COUNT(1) FROM pg_stat_activity WHERE state='active' and pid != pg_backend_pid()"
+            "psql", "-U", "postgres", "-d", "postgres", "-t", "-A", "-c",
+            "SELECT pid FROM pg_stat_activity WHERE state='active' and pid != pg_backend_pid()"
         ]
         stdout = executor.exec_cmd(cmd)
-        # If stdout matches "count\n0", then count is 0 -> Not alive.
-        # Otherwise -> Alive.
-        return stdout.strip() != "count\n0"
+        result = stdout.strip()
+        return result if result else None
+
+    def _server_cancel(self, executor: DockerExecutor, query_id: str):
+        cmd = [
+            "psql", "-U", "postgres", "-d", "postgres", "-c",
+            f"SELECT pg_cancel_backend({query_id})"
+        ]
+        try:
+            executor.exec_cmd(cmd)
+        except Exception:
+            pass
 
     def _crash_detector(self, stdout: str, stderr: str) -> bool:
         return "server closed the connection unexpectedly" in stderr

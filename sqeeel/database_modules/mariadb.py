@@ -30,31 +30,30 @@ class MariaDBModule(DatabaseModule):
             init_queries=["CREATE TABLE IF NOT EXISTS x(x int)"],
             timeout=args.query_timeout,
             is_query_alive_callback=self._is_query_alive,
+            server_cancel_callback=self._server_cancel,
             crash_detector=self._crash_detector
         )
 
-    def _is_query_alive(self, executor: DockerExecutor) -> bool:
+    def _is_query_alive(self, executor: DockerExecutor) -> Optional[str]:
         # Check for active queries in information_schema.processlist
-        # Excluding the current check query might be tricky if not careful, but usually
-        # the check query is fast. We look for other queries.
-        # Command must be non-interactive to output cleanly.
-        cmd = [
-            "mariadb", "-u", "root", "-pmysecretpassword", "-D", "testdb", "-e",
-            "SELECT COUNT(1) FROM information_schema.processlist WHERE command != 'Sleep' AND id != CONNECTION_ID()"
-        ]
-        # mariadb output format with -e is tabular by default, we can parse it.
-        # Or use -N (skip column names) -s (silent/raw)
         cmd = [
             "mariadb", "-u", "root", "-pmysecretpassword", "-D", "testdb", "-N", "-s", "-e",
-            "SELECT COUNT(1) FROM information_schema.processlist WHERE command != 'Sleep' AND id != CONNECTION_ID()"
+            "SELECT id FROM information_schema.processlist WHERE command != 'Sleep' AND id != CONNECTION_ID()"
         ]
         
+        stdout = executor.exec_cmd(cmd)
+        result = stdout.strip()
+        return result if result else None
+
+    def _server_cancel(self, executor: DockerExecutor, query_id: str):
+        cmd = [
+            "mariadb", "-u", "root", "-pmysecretpassword", "-D", "testdb", "-e",
+            f"KILL QUERY {query_id}"
+        ]
         try:
-            stdout = executor.exec_cmd(cmd)
-            # if 0 -> not alive
-            return stdout.strip() != "0"
+            executor.exec_cmd(cmd)
         except Exception:
-            return False
+            pass
 
     def _crash_detector(self, stdout: str, stderr: str) -> bool:
         return "Lost connection to MySQL server" in stderr or "Can't connect to MySQL server" in stderr

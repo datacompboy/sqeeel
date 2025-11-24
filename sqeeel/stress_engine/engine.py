@@ -28,6 +28,8 @@ class StressEngine:
             return "timeout", ""
         if result.status == ExecutionStatus.HANG:
             return "hang", ""
+        if result.status == ExecutionStatus.CLIENT_HANG:
+            return "client-hang", ""
         if result.status == ExecutionStatus.CRASH:
             return "crash", ""
 
