@@ -1,0 +1,19 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engine for Postgresql and engine for MariaDB is in progress.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+Please add a new mutually exclusive mode to choose the template from the given command line argument.
+
+Right now the --templates-source is supposed to choose between dynamic or file as source, but actually it makes things inconvenient.
+Let's choose it based on the flag given:
+  --templates-file => file is the source
+  --grammar-file => source is dynamic
+  --template="('pref','lef','mid','rig','suf')" => source is this single fixed template.

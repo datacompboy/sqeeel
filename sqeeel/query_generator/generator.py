@@ -1,11 +1,25 @@
 from collections import namedtuple
 from typing import List, Optional, Callable, Tuple, Set, Dict
 import networkx as nx
+import ast
 
 from sqeeel.query_generator.grammar_parser import parse_grammar
 from sqeeel.query_generator.graph_builder import build_graph
 
 QueryTemplate = namedtuple('QueryTemplate', ['prefix', 'left', 'middle', 'right', 'suffix'])
+def parse_template_string(template_str: str) -> QueryTemplate:
+    try:
+        tpl = ast.literal_eval(template_str)
+        if not isinstance(tpl, (tuple, list)) or len(tpl) != 5:
+            raise ValueError("Template must be a 5-tuple of strings")
+        if not all(isinstance(x, str) for x in tpl):
+            raise ValueError("Template must be a 5-tuple of strings")
+        if len(tpl[1]) + len(tpl[3]) == 0:
+            raise ValueError("Template must have non-empty left or right part")
+        return QueryTemplate(*tpl)
+    except (ValueError, SyntaxError) as e:
+        raise ValueError(f"Invalid template format: {e}")
+
 
 class QueryGenerator:
     def __init__(self, grammar_file: str, max_cycle_length: int = 5,

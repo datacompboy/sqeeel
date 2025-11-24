@@ -7,7 +7,7 @@ import time
 from typing import List, Tuple
 
 from sqeeel.stress_engine.engine import StressEngine
-from sqeeel.query_generator import QueryGenerator
+from sqeeel.query_generator import QueryGenerator, parse_template_string
 from sqeeel.database_modules import get_db_module, get_all_db_modules
 
 
@@ -60,23 +60,29 @@ def get_templates(args, db_module) -> List:
     Retrieves templates based on source configuration.
     """
     templates = []
-    if args.templates_source == 'json':
+    
+    if args.template:
         try:
-            with open(args.templates_file, 'r') as f:
+            tpl = parse_template_string(args.template)
+            templates.append(tpl)
+        except ValueError as e:
+            logging.error(f"{e}")
+            sys.exit(1)
+    elif args.grammar_file:
+        generator = db_module.create_query_generator(args.grammar_file, args.max_cycle_length)
+        templates = generator.generate_templates(args.start_token)
+    else:
+        # Default to json file (either explicit --templates-file or default "templates.json")
+        t_file = args.templates_file if args.templates_file else "templates.json"
+        try:
+            with open(t_file, 'r') as f:
                 raw_templates = json.load(f)
                 # Convert dicts back to tuples/values
                 for t in raw_templates:
                     templates.append((t['prefix'], t['left'], t['middle'], t['right'], t['suffix']))
         except FileNotFoundError:
-             logging.error(f"Templates file not found: {args.templates_file}")
+             logging.error(f"Templates file not found: {t_file}")
              sys.exit(1)
-    elif args.templates_source == 'dynamic':
-        if not args.grammar_file:
-            logging.error("Grammar file is required for dynamic template generation.")
-            sys.exit(1)
-        
-        generator = db_module.create_query_generator(args.grammar_file, args.max_cycle_length)
-        templates = generator.generate_templates(args.start_token)
     
     return templates
 
@@ -210,28 +216,27 @@ def main():
     )
 
     # Template selection
-    stress_parser.add_argument(
-        "--templates-source",
-        choices=['json', 'dynamic'],
-        default='json',
-        help="Source of query templates."
-    )
-    stress_parser.add_argument(
+    template_group = stress_parser.add_mutually_exclusive_group()
+    template_group.add_argument(
         "--templates-file",
-        default="templates.json",
-        help="Path to JSON templates file (used if source is json)."
+        help="Path to JSON templates file."
     )
-    stress_parser.add_argument(
+    template_group.add_argument(
         "--grammar-file",
-        help="Path to grammar file (required if source is dynamic)."
+        help="Path to grammar file for dynamic generation."
     )
+    template_group.add_argument(
+        "--template",
+        help="Single template tuple string (e.g. \"('SELECT ', '1,', '1', '', '')\")."
+    )
+
     stress_parser.add_argument(
         "--start-token",
         default="stmt",
         help="Start token for dynamic generation."
     )
     stress_parser.add_argument(
-         "--max-cycle-length",
+        "--max-cycle-length",
         type=int,
         default=10,
         help="The maximum length of cycles to consider (dynamic generation).",
