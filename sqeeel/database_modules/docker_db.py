@@ -274,6 +274,11 @@ class DockerExecutor(Executor[DockerExecResult]):
         end_time = time.monotonic()
         duration = end_time - start_time
 
+        if len(stdout) > 11005:
+            stdout = stdout[:10000] + "..." + stdout[-1000:]
+        if len(stderr) > 11005:
+            stderr = stderr[:10000] + "..." + stderr[-1000:]
+
         error_message = None
         
         if status == ExecutionStatus.SUCCESS:
