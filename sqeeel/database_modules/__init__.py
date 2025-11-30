@@ -5,11 +5,13 @@ from .base import ExecResult, Executor, DatabaseModule
 from .docker_db import DockerExecutor
 from .postgresql import PostgresModule
 from .mariadb import MariaDBModule
+from .cockroachdb import CockroachModule
 
 _MODULES = {
     m.name: m for m in [
         PostgresModule(),
         MariaDBModule(),
+        CockroachModule(),
     ]
 }
 

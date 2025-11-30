@@ -1,0 +1,89 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engines for Postgresql and MariaDB.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+Now we need to add support for CockroachDB. The grammar is similar and based on the PostgreSQL, the grammars/cockroachdb-sql.y file is there
+with the latest version from CockroachDB repository (do not try to read grammar files, they are huge, ~500kb); but we can assume for start it's
+same as PostgreSQL.
+
+Since that a distributed database, we should find a way to provide multi-container database setup: create network, run multiple containers, run init
+on one of them. The health/crash check should check status of status of all containers running; or check all running and check the list list all containers...
+
+The up to date instruction on how to run multi-node cluster, consult with https://www.cockroachlabs.com/docs/stable/start-a-local-cluster-in-docker-mac#start-a-single-node-cluster
+
+We should not create volumes, as the goal is to run ephemeral system -- in case of any failure we restart system from scratch.
+
+Please plan and propose the solution, before going to implement it.
+
+>>>>>> Addendum
+
+I've updated CockroachModule's _grammar_token_rewriter function to handle cockroachdb-specific rewrites:
+  - replaced scanner replacement table
+  - added lexer replacement rules
+  - removed _P suffix handling (there is no such thing there)
+  - added handling _LA and _ALL suffixes instead
+
+Please update tests/test_generator_cockroach.py to match the changes.
+
+>>>>>> Debugging startup
+
+The implementation doesn't correctly wait for database startup or initialization. The only log, though, is:
+
+```
+2025-11-30 22:36:52,443 - Starting database container...
+d444e5361eb97106f13e3e383b467a8ea7c160078ba1c1635c0a160d5509193e
+Waiting for nodes to start...
+Initializing cluster...
+Cluster successfully initialized
+Waiting for database to be ready...
+2025-11-30 22:37:59,907 - An error occurred during stress testing.
+Traceback (most recent call last):
+  File "/home/datacompboy/work/sqeeel/sqeeel/main.py", line 167, in run_stress_test
+    executor.wait_for_ready()
+  File "/home/datacompboy/work/sqeeel/sqeeel/database_modules/docker_db.py", line 106, in wait_for_ready
+    raise TimeoutError("Database failed to start within 60 seconds.")
+TimeoutError: Database failed to start within 60 seconds.
+```
+
+The last messages of database containers logs are:
+```
+clusterID:           857615c3-9bfa-4d73-997e-4ca5b576f2fd
+status:              initialized new cluster
+nodeID:              1
+```
+
+```
+clusterID:           857615c3-9bfa-4d73-997e-4ca5b576f2fd
+status:              initialized new node, joined pre-existing cluster
+nodeID:              2
+```
+
+```
+clusterID:           857615c3-9bfa-4d73-997e-4ca5b576f2fd
+status:              initialized new node, joined pre-existing cluster
+nodeID:              3
+```
+
+Could you please add more logging or other way to debug the reason the initialization did not complete? It does seems all nodes are up and joined the cluster...
+
+>>>>>> Continue
+
+Actually, the requirement for the semicolon at the end of the query is cockroachdb sql client special requirement. Let's make CockroachExecutor automatically send ";" before closing the channel to the client command.
+
+>>>>>> Continue
+
+Now we should update error folding:
+
+('error', 'ERROR: message size 21 MiB bigger than maximum allowed message size 16 MiB\n')
+
+since we send messages of different size, we should normalize it to 'ERROR: message size ... bigger than maximum allowed message size 16 MiB\n'
+
+By replacing whateve rbtween "message size" and "bigger" with ellipsis.
