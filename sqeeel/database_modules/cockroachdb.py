@@ -13,6 +13,9 @@ class CockroachExecutor(DockerExecutor):
         self.network_name = f"sqeeel-net-{uuid.uuid4().hex[:8]}"
         self.node_names = [f"{self.container_name}-{i}" for i in range(1, 4)]
         self.container_ids = []
+        # We need to set container_name to a real container name for DockerExecutor methods
+        # like _client_cancel that rely on it.
+        self.container_name = self.node_names[0]
 
     def start(self):
         # Create network
@@ -198,6 +201,8 @@ class CockroachModule(DatabaseModule):
         first_line = lines[0] if lines else ""
         
         first_line = re.sub(r"message size .*? bigger", "message size ... bigger", first_line)
+        if len(first_line) > 200 and first_line.startswith("ERROR: "):
+            first_line = first_line[:200] + "..."
         
         return re.sub(r'"[^"]*"', '"..."', first_line)
 

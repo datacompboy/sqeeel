@@ -87,3 +87,10 @@ Now we should update error folding:
 since we send messages of different size, we should normalize it to 'ERROR: message size ... bigger than maximum allowed message size 16 MiB\n'
 
 By replacing whateve rbtween "message size" and "bigger" with ellipsis.
+
+>>>>>> Continue
+
+The query hang-vs-timeout detection is not functioning properly.
+After the timeout it prints
+    `Error: No such object: sqeeel-test-db-cockroach`
+and tries to restart database. Looks like checking queries live and trying to kill them is incorrect.
