@@ -1,0 +1,16 @@
+>>>> Function creation (talked to gemini chat and claude chat, gemini won):
+
+Imagine, we have a sequence of strings like that: ('a', 'b', 'c', 'd', 'e')
+This sequence got converted to template like that:
+  print('a', end='')
+  print('b'*N, end='')
+  print('c', end='')
+  print('d'*N, end='')
+  print('e', end='')
+
+Please write an function, that will receive the sequence and prints copy-pasteable bash command that should take the N from the command line argument and print the resulting string. Make sure the generated one-liner it as short as possible, and single-line (i.e. no multiline strings).
+
+>>>> Integration
+
+I've added generate_cmd function to query_generator.
+Please add to the sqeeel.main new command "generate-cmd" that should receive single positional argument as query template in a single string (same as --template argument receives) and prints it as bash one-liner using `generate_cmd` function.

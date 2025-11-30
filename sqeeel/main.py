@@ -7,7 +7,7 @@ import time
 from typing import List, Tuple
 
 from sqeeel.stress_engine.engine import StressEngine
-from sqeeel.query_generator import QueryGenerator, parse_template_string
+from sqeeel.query_generator import QueryGenerator, parse_template_string, generate_cmd
 from sqeeel.database_modules import get_db_module, get_all_db_modules
 
 
@@ -137,6 +137,19 @@ def generate_templates(args):
         json.dump([t._asdict() for t in templates], f, indent=2)
         
     print(f"Saved {len(templates)} templates to {args.output_file}")
+
+
+def run_generate_cmd(args):
+    """
+    Generates a bash one-liner for a query template.
+    """
+    try:
+        tpl = parse_template_string(args.template)
+        cmd = generate_cmd(tpl)
+        print(cmd)
+    except ValueError as e:
+        logging.error(f"{e}")
+        sys.exit(1)
 
 
 def run_stress_test(args):
@@ -310,6 +323,11 @@ def main():
         help="The maximum length of cycles to consider.",
     )
     gen_parser.set_defaults(func=generate_templates)
+
+    # Sub-parser for the generate-cmd command
+    cmd_parser = subparsers.add_parser("generate-cmd", help="Generate bash one-liner for a query template.")
+    cmd_parser.add_argument("template", type=str, help="Single template tuple string (e.g. \"('SELECT ', '1,', '1', '', '')\")")
+    cmd_parser.set_defaults(func=run_generate_cmd)
 
     args = parser.parse_args()
     args.func(args)

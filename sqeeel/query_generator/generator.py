@@ -20,6 +20,47 @@ def parse_template_string(template_str: str) -> QueryTemplate:
     except (ValueError, SyntaxError) as e:
         raise ValueError(f"Invalid template format: {e}")
 
+def generate_cmd(sequence):
+    """
+    Generates a high-performance, syntactically correct Bash one-liner.
+    Uses lambda and streaming to ensure single-line compatibility and speed.
+    """
+    # 1. Preamble & Helper Function (Lambda)
+    # R = itertools.repeat, w = sys.stdout.writelines, n = input number
+    # f = lambda s: Chunk and stream the repeated string s.
+    # The list comprehension consumes the generator created by R()
+    header = (
+        "import sys,itertools;R=itertools.repeat;"
+        "w=sys.stdout.writelines;n=int(input());"
+        "f=lambda s,k=8192:[w(R(s*k,n//k)),w([s*(n%k)])]"
+    )
+
+    body = []
+
+    # 2. Build the calls
+    for i, text in enumerate(sequence):
+        # Escape for Python string
+        safe_text = text.replace("\\", "\\\\").replace("'", "\\'")
+
+        if not text: continue
+
+        if i % 2 == 0:
+            # Constant: print once (wrapped in list for writelines)
+            body.append(f"w(['{safe_text}'])")
+        else:
+            # Repeating: call the optimized lambda function 'f'
+            body.append(f"f('{safe_text}')")
+
+    # 3. Assemble and Escape for Bash
+    # Note: We use a list comprehension in the main body to execute the lambda calls
+    # without needing a multi-line loop.
+    script = header + f";any(({','.join(body)}))"
+
+    # Wrap in Bash: Escape double quotes for the bash argument
+    bash_safe_code = script.replace('"', '\\"').replace("\\", "\\\\")
+
+    return f'python3 -c "{bash_safe_code}"<<<$1'
+
 
 class QueryGenerator:
     def __init__(self, grammar_file: str, max_cycle_length: int = 5,
