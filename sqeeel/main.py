@@ -7,8 +7,10 @@ import time
 from typing import List, Tuple
 
 from sqeeel.stress_engine.engine import StressEngine
+from sqeeel.stress_engine.intervals import add_interval
 from sqeeel.query_generator import QueryGenerator, parse_template_string, generate_cmd
 from sqeeel.database_modules import get_db_module, get_all_db_modules
+from sqeeel.template_instantiator.instantiator import TemplateInstantiator
 
 
 def setup_logging(args):
@@ -152,6 +154,200 @@ def run_generate_cmd(args):
         sys.exit(1)
 
 
+def parse_size(value):
+    mult = 1
+    value = value.lower()
+    if value.endswith('g'):
+        mult = 1024**3
+        value = value[:-1]
+    elif value.endswith('m'):
+        mult = 1024**2
+        value = value[:-1]
+    elif value.endswith('k'):
+        mult = 1024
+        value = value[:-1]
+    return int(float(value) * mult)
+
+
+def parse_time(value):
+    mult = 1
+    value = value.lower()
+    if value.endswith('m'):
+        mult = 60
+        value = value[:-1]
+    elif value.endswith('s'):
+        mult = 1
+        value = value[:-1]
+    return float(value) * mult
+
+
+def run_explore_mode(args):
+    """
+    Runs the explore interactive mode.
+    """
+    # Explore mode defaults
+    args.nostats = True
+    setup_logging(args)
+
+    db_module = get_db_module(args.db_type)
+    executor = db_module.create_executor(args)
+
+    try:
+        logging.info("Starting database container...")
+        executor.start()
+        executor.wait_for_ready()
+        logging.warning("Database container started.")
+
+        # Use StressEngine as helper
+        engine = StressEngine(executor, [], max_query_size=args.max_query_size, verbose=args.verbose)
+
+        current_template = None
+        if args.template:
+             try:
+                current_template = parse_template_string(args.template)
+             except ValueError as e:
+                logging.error(f"Invalid initial template: {e}")
+
+        stats = {}
+        intervals = []
+
+        print("Entering explore mode. Type 'help' for commands.")
+
+        while True:
+            # Show state
+            print(f"\nCurrent Template: {current_template}")
+            if intervals:
+                print("Known Intervals:")
+                for i in sorted(intervals, key=lambda x: x['begin']):
+                     print(f"  {i['begin']} - {i['end']}: {i['effect']}")
+            
+            try:
+                line = input("> ").strip()
+            except EOFError:
+                break
+            
+            if not line:
+                continue
+            
+            # 1. Check for template setting (Bracket-enclosed)
+            new_template = None
+            cmd_part = line
+            
+            start_paren = line.find('(')
+            end_paren = line.rfind(')')
+            
+            if start_paren != -1 and end_paren != -1 and end_paren > start_paren:
+                tpl_str = line[start_paren:end_paren+1]
+                try:
+                    new_template = parse_template_string(tpl_str)
+                    # Extract command part (before template)
+                    cmd_part = line[:start_paren].strip()
+                except ValueError as e:
+                    # Not a valid template, ignore
+                    logging.error(f"Invalid template: {e}")
+            
+            if new_template:
+                current_template = new_template
+                stats = {}
+                intervals = []
+                # engine.templates = [current_template]
+                print(f"Template set to: {current_template}")
+            
+            if not cmd_part and new_template:
+                continue
+
+            tokens = cmd_part.split()
+            if not tokens:
+                continue
+            
+            cmd = tokens[0]
+
+            if cmd == "exit" or cmd == "quit":
+                break
+
+            elif cmd == "init":
+                if not current_template:
+                    print("No template set.")
+                    continue
+                
+                instantiator = TemplateInstantiator(current_template)
+                size = 1
+                while True:
+                     res = engine._run_query_for_size(instantiator, size, stats)
+                     if res is None: # Too big
+                         break
+                     
+                     effect = engine._get_effect(res)
+                     add_interval(intervals, size, effect)
+                     
+                     size *= 10
+
+            elif cmd == "set":
+                if len(tokens) < 3:
+                    print("Usage: set <param> <value>")
+                    continue
+                param = tokens[1]
+                value = tokens[2]
+
+                if param == "max-size":
+                    try:
+                        engine.max_query_size = parse_size(value)
+                        print(f"max-query-size set to {engine.max_query_size}")
+                    except ValueError:
+                        print("Invalid size format. Use 1g, 100m, etc.")
+                elif param == "timeout":
+                    try:
+                        t = parse_time(value)
+                        if hasattr(executor, 'timeout'):
+                            setattr(executor, 'timeout', t)
+                            print(f"timeout set to {t}s")
+                        else:
+                            print("Executor does not support dynamic timeout update.")
+                    except ValueError:
+                         print("Invalid time format. Use 5m, 30s, etc.")
+                else:
+                    print(f"Unknown parameter: {param}")
+
+            elif cmd in ["quiet", "verbose", "debug"]:
+                # Adjust root logger or console handler
+                level = logging.WARNING
+                if cmd == "verbose": level = logging.INFO
+                if cmd == "debug": level = logging.DEBUG
+                
+                root = logging.getLogger()
+                if level < root.getEffectiveLevel():
+                    root.setLevel(level)
+                # Find console handler
+                for h in root.handlers:
+                    if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler):
+                        h.setLevel(level)
+                print(f"Output level set to {cmd.upper()}")
+
+            elif cmd.isdigit():
+                if not current_template:
+                    print("No template set.")
+                    continue
+                size = int(cmd)
+                instantiator = TemplateInstantiator(current_template)
+                res = engine._run_query_for_size(instantiator, size, stats)
+                if res:
+                    effect = engine._get_effect(res)
+                    print(f"Result: {effect}")
+                    add_interval(intervals, size, effect)
+                else:
+                    print("Query too large.")
+            
+            else:
+                print(f"Unknown command: {cmd}")
+
+    except Exception:
+        logging.exception("An error occurred during explore mode.")
+    finally:
+        logging.info("Stopping database container...")
+        executor.stop()
+        logging.warning("Container stopped.")
+
+
 def run_stress_test(args):
     """
     Runs the stress test against a database.
@@ -172,7 +368,7 @@ def run_stress_test(args):
         
         logging.info(f"Running stress test with {len(templates)} templates.")
 
-        stress_engine = StressEngine(executor, templates, max_query_size=args.max_query_size, verbose=args.verbose)
+        stress_engine = StressEngine(executor, templates, max_query_size=args.max_query_size, verbose=args.verbose, quick=args.quick)
         
         results = stress_engine.run()
 
@@ -292,6 +488,11 @@ def main():
         action="store_true",
         help="Disable stats file logging."
     )
+    stress_parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Enable quick scan mode."
+    )
 
     # Dynamic module args
     if pre_args.db_type:
@@ -303,6 +504,61 @@ def main():
             pass
 
     stress_parser.set_defaults(func=run_stress_test)
+
+
+    # Sub-parser for the explore command
+    explore_parser = subparsers.add_parser("explore", help="Run interactive explore mode.")
+    explore_parser.add_argument(
+        "--db-type",
+        type=str,
+        required=True,
+        choices=get_all_db_modules().keys(),
+        help="Database type module to use",
+    )
+    explore_parser.add_argument(
+        "--query-timeout",
+        type=float,
+        default=10.0,
+        help="Query execution timeout in seconds (default: 10s).",
+    )
+    explore_parser.add_argument(
+        "--max-query-size",
+        type=int,
+        default=32 * 1024 * 1024,
+        help="Maximum query size in bytes (default: 32MB).",
+    )
+    explore_parser.add_argument(
+        "--template",
+        help="Initial template tuple string."
+    )
+    explore_parser.add_argument(
+        "--log",
+        default="explore.log",
+        help="Log file path."
+    )
+    explore_parser.add_argument(
+        "--nolog",
+        action="store_true",
+        help="Disable file logging."
+    )
+    explore_parser.add_argument(
+        "--stats",
+        help="Stats log file path (optional, default stats disabled in explore).",
+    )
+    explore_parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable verbose output.",
+    )
+
+    if pre_args.db_type:
+        try:
+            db_module = get_db_module(pre_args.db_type)
+            db_module.configure_args(explore_parser)
+        except ValueError:
+            pass
+            
+    explore_parser.set_defaults(func=run_explore_mode)
 
 
     # Sub-parser for the generate-templates command

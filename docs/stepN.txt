@@ -1,0 +1,34 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engines for Postgresql, MariaDB and CockroachDB.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+Let's expand the tool with quick-scan feature and an interactive mode.
+
+1. For the `stress-test` mode, please add `--quick` flag, that should run the stress testing loop with extra termination conditions:
+
+- If "crash" effect is observed, the scanning loop is finished early.
+- If "hang" effect is on one of the sides, instead of middle point, use 1:2 split.
+    I mean, if there are "error" effect at size A and "hang" effect at size B, and A<B, then instead of (A+B)//2, the next test point should be A+(B-A)//3.
+    In a similar way, if A>B, then the next point should be A-(A-B)//3.
+
+2. And add an "explore" mode, where system runs the database / etc, and then run interactive loop, parsing each input line according to the following rules:
+
+1. Bracket-enclosed template (e.g. `('SELECT ', '1,', '1', '', '')`): parse and set the template as the current one. Reset stats.
+2. "init" command runs initial scan with 10 times increments between 1 and max-size.
+3. "set" command allows to change settings, e.g. "set max-size 1g" allows to set maximum size for the current run of a given human-readable/writeable;
+   and "set timeout 5m" should change timeout setting to given time, also human readable.
+4. "quiet"/"verbose"/"debug" should configure stdout printing level to WARN/INFO/DEBUG correspondingly.
+5. "555" simple integer input means run test at a given size.
+6. Combination of "init" + template and integer + template should also be accepted to set template and run the given command in one go.
+
+Show current template and current known intervals before each input.
+This mode should require `--db-type` flag, and allow setting initial values via `--query-timeout`, `--max-query-size`; allow use `--template` to set initial
+template; support `--log`/`--nolog` flags, but in contrary to stress-test, the `--nostats` is assumed default.

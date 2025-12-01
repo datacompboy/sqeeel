@@ -11,11 +11,12 @@ class StressEngine:
     Creates templates generator, loops over chosen templates, and for each
     runs a stress loop for some chosen sizes.
     """
-    def __init__(self, db_module, templates, max_query_size=32*1024*1024, verbose=False):
+    def __init__(self, db_module, templates, max_query_size=32*1024*1024, verbose=False, quick=False):
         self.db_module = db_module
         self.templates = templates
         self.max_query_size = max_query_size
         self.verbose = verbose
+        self.quick = quick
 
     def _get_effect(self, result):
         """
@@ -98,6 +99,7 @@ class StressEngine:
 
         # 1. Initial discovery phase
         size = 1
+        quick_crashed = False
         while True:
             result = self._run_query_for_size(instantiator, size, stats)
             effect = self._get_effect(result)
@@ -105,12 +107,18 @@ class StressEngine:
                 intervals[-1]["end"] = size
             else:
                 intervals.append({"begin": size, "end": size, "effect": effect})
+
+            if self.quick and effect[0] == "crash":
+                logging.warning("Crash observed in quick scan. Terminating discovery.")
+                quick_crashed = True
+                break
+
             if result is None:
                 break
             size *= 10
 
         # 2. Close the gaps
-        while True:
+        while not quick_crashed:
             merged = False
             new_intervals = []
             if not intervals:
@@ -123,8 +131,28 @@ class StressEngine:
 
                 if end1 + 1 < begin2:
                     middle = (end1 + begin2) // 2
+                    if self.quick:
+                        is_hang1 = (effect1[0] == "hang")
+                        is_hang2 = (effect2[0] == "hang")
+                        if is_hang1 != is_hang2:
+                            diff = begin2 - end1
+                            step = max(1, diff // 3)
+                            if is_hang2:
+                                middle = end1 + step
+                            else:
+                                middle = begin2 - step
+
                     result = self._run_query_for_size(instantiator, middle, stats)
                     effect = self._get_effect(result)
+
+                    if self.quick and effect[0] == "crash":
+                        logging.warning("Crash observed during gap closing. Terminating.")
+                        quick_crashed = True
+                        new_intervals.append({"begin": middle, "end": middle, "effect": effect})
+                        new_intervals.extend(intervals[i+1:])
+                        merged = False
+                        break
+
                     if effect == effect1:
                         new_intervals[-1]["end"] = middle
                     elif effect == effect2:
