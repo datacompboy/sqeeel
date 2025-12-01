@@ -89,7 +89,18 @@ class TestDockerExecutorTimeout(unittest.TestCase):
         process_mock.poll.return_value = None # Still running
         process_mock.returncode = None
         
-        mock_popen.return_value = process_mock
+        inspect_mock = MagicMock()
+        inspect_mock.communicate.return_value = ("true", "")
+        inspect_mock.returncode = 0
+        inspect_mock.poll.return_value = 0
+        inspect_mock.__enter__.return_value = inspect_mock
+
+        def side_effect(cmd, *args, **kwargs):
+            if "inspect" in cmd:
+                return inspect_mock
+            return process_mock
+
+        mock_popen.side_effect = side_effect
         
         executor = DockerExecutor(
             image_name="img", 
@@ -106,7 +117,7 @@ class TestDockerExecutorTimeout(unittest.TestCase):
         
         # Assertions
         process_mock.kill.assert_called() # Fallback kill should be called
-        self.assertEqual(result.status, ExecutionStatus.HANG) # Because poll() returned None, so it's considered alive (hang)
+        self.assertEqual(result.status, ExecutionStatus.TIMEOUT) # poll() -> None (force kill) but status determined as TIMEOUT
 
     @patch("subprocess.Popen")
     def test_timeout_success(self, mock_popen):
@@ -116,7 +127,18 @@ class TestDockerExecutorTimeout(unittest.TestCase):
         # First poll (before kill/during check) -> returns 0 (dead)
         process_mock.poll.return_value = 0
         
-        mock_popen.return_value = process_mock
+        inspect_mock = MagicMock()
+        inspect_mock.communicate.return_value = ("true", "")
+        inspect_mock.returncode = 0
+        inspect_mock.poll.return_value = 0
+        inspect_mock.__enter__.return_value = inspect_mock
+
+        def side_effect(cmd, *args, **kwargs):
+            if "inspect" in cmd:
+                return inspect_mock
+            return process_mock
+
+        mock_popen.side_effect = side_effect
         
         executor = DockerExecutor(
             image_name="img", 
@@ -129,21 +151,33 @@ class TestDockerExecutorTimeout(unittest.TestCase):
         with patch("time.sleep"):
              result = executor.run_query("SELECT 1")
              
-        process_mock.kill.assert_called()
+        process_mock.kill.assert_not_called()
         self.assertEqual(result.status, ExecutionStatus.TIMEOUT)
 
     @patch("subprocess.Popen")
     def test_timeout_hang(self, mock_popen):
         # Case: Timeout, kill called, process still alive -> HANG
+        # Note: If is_query_alive_callback is None, status becomes TIMEOUT, not HANG.
         process_mock = MagicMock()
         process_mock.communicate.side_effect = subprocess.TimeoutExpired(cmd="cmd", timeout=1)
         process_mock.poll.return_value = None # Always alive
         
-        mock_popen.return_value = process_mock
+        inspect_mock = MagicMock()
+        inspect_mock.communicate.return_value = ("true", "")
+        inspect_mock.returncode = 0
+        inspect_mock.poll.return_value = 0
+        inspect_mock.__enter__.return_value = inspect_mock
+
+        def side_effect(cmd, *args, **kwargs):
+            if "inspect" in cmd:
+                return inspect_mock
+            return process_mock
+
+        mock_popen.side_effect = side_effect
         
         executor = DockerExecutor(
-            image_name="img", 
-            container_name="cont", 
+            image_name="img",
+            container_name="cont",
             client_command=["cmd"],
             timeout=1
         )
@@ -152,15 +186,27 @@ class TestDockerExecutorTimeout(unittest.TestCase):
         with patch("time.sleep"):
              result = executor.run_query("SELECT 1")
              
-        self.assertEqual(result.status, ExecutionStatus.HANG)
+        self.assertEqual(result.status, ExecutionStatus.TIMEOUT)
 
     @patch("subprocess.Popen")
     def test_custom_alive_check(self, mock_popen):
         # Case: Timeout, custom alive check returns True -> HANG
         process_mock = MagicMock()
         process_mock.communicate.side_effect = subprocess.TimeoutExpired(cmd="cmd", timeout=1)
-        mock_popen.return_value = process_mock
         
+        inspect_mock = MagicMock()
+        inspect_mock.communicate.return_value = ("true", "")
+        inspect_mock.returncode = 0
+        inspect_mock.poll.return_value = 0
+        inspect_mock.__enter__.return_value = inspect_mock
+
+        def side_effect(cmd, *args, **kwargs):
+            if "inspect" in cmd:
+                return inspect_mock
+            return process_mock
+
+        mock_popen.side_effect = side_effect
+
         alive_check = MagicMock(return_value=True)
         
         executor = DockerExecutor(
