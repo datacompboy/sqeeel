@@ -4,6 +4,35 @@ Stress engine.
 import logging
 from ..template_instantiator.instantiator import TemplateInstantiator
 from ..database_modules.base import ExecutionStatus
+from ..stress_engine.intervals import add_interval
+from ..query_generator import parse_template_string
+
+
+def parse_size(value):
+    mult = 1
+    value = value.lower()
+    if value.endswith('g'):
+        mult = 1024**3
+        value = value[:-1]
+    elif value.endswith('m'):
+        mult = 1024**2
+        value = value[:-1]
+    elif value.endswith('k'):
+        mult = 1024
+        value = value[:-1]
+    return int(float(value) * mult)
+
+
+def parse_time(value):
+    mult = 1
+    value = value.lower()
+    if value.endswith('m'):
+        mult = 60
+        value = value[:-1]
+    elif value.endswith('s'):
+        mult = 1
+        value = value[:-1]
+    return float(value) * mult
 
 
 class StressEngine:
@@ -89,6 +118,29 @@ class StressEngine:
 
         return result
 
+    def _discover_intervals(self, instantiator, stats, intervals):
+        """
+        Runs the initial discovery phase (powers of 10).
+        Returns True if quick crash detected (and should stop).
+        """
+        size = 1
+        quick_crashed = False
+        while True:
+            result = self._run_query_for_size(instantiator, size, stats)
+            effect = self._get_effect(result)
+            add_interval(intervals, size, effect)
+
+            if self.quick and effect[0] == "crash":
+                logging.warning("Crash observed in quick scan. Terminating discovery.")
+                quick_crashed = True
+                break
+            
+            if result is None: # Too big
+                break
+            
+            size *= 10
+        return quick_crashed
+
     def _stress_template(self, template):
         """
         Runs the stress loop for a single template.
@@ -98,24 +150,7 @@ class StressEngine:
         stats = {}
 
         # 1. Initial discovery phase
-        size = 1
-        quick_crashed = False
-        while True:
-            result = self._run_query_for_size(instantiator, size, stats)
-            effect = self._get_effect(result)
-            if len(intervals) > 0 and intervals[-1]["effect"] == effect:
-                intervals[-1]["end"] = size
-            else:
-                intervals.append({"begin": size, "end": size, "effect": effect})
-
-            if self.quick and effect[0] == "crash":
-                logging.warning("Crash observed in quick scan. Terminating discovery.")
-                quick_crashed = True
-                break
-
-            if result is None:
-                break
-            size *= 10
+        quick_crashed = self._discover_intervals(instantiator, stats, intervals)
 
         # 2. Close the gaps
         while not quick_crashed:
@@ -187,3 +222,153 @@ class StressEngine:
             results[str(template)] = self._stress_template(template)
         logging.warning("Stress test finished.")
         return results
+
+    def explore(self, initial_template_str=None):
+        """
+        Runs the explore interactive mode.
+        """
+        current_template = None
+        if initial_template_str:
+            try:
+                current_template = parse_template_string(initial_template_str)
+            except ValueError as e:
+                logging.error(f"Invalid initial template: {e}")
+
+        stats = {}
+        intervals = []
+
+        print("Entering explore mode. Type 'help' for commands.")
+
+        while True:
+            # Show state
+            print(f"\nCurrent Template: {current_template}")
+            if intervals:
+                print("Known Intervals:")
+                for i in sorted(intervals, key=lambda x: x['begin']):
+                    print(f"  {i['begin']} - {i['end']}: {i['effect']}")
+            
+            try:
+                line = input("> ").strip()
+            except EOFError:
+                break
+            
+            if not line:
+                continue
+            
+            # 1. Check for template setting (Bracket-enclosed)
+            new_template = None
+            cmd_part = line
+            
+            start_paren = line.find('(')
+            end_paren = line.rfind(')')
+            
+            if start_paren != -1 and end_paren != -1 and end_paren > start_paren:
+                tpl_str = line[start_paren:end_paren+1]
+                try:
+                    new_template = parse_template_string(tpl_str)
+                    # Extract command part (before template)
+                    cmd_part = line[:start_paren].strip()
+                except ValueError as e:
+                    # Not a valid template, ignore
+                    logging.error(f"Invalid template: {e}")
+            
+            if new_template:
+                current_template = new_template
+                stats = {}
+                intervals = []
+                print(f"Template set to: {current_template}")
+            
+            if not cmd_part and new_template:
+                continue
+
+            tokens = cmd_part.split()
+            if not tokens:
+                continue
+            
+            cmd = tokens[0]
+
+            if cmd == "exit" or cmd == "quit":
+                break
+
+            elif cmd == "help":
+                print("Available commands:")
+                print("  ('TEMPLATE_STR')       Set current template (e.g. ('SELECT ', '1', ...))")
+                print("  init                   Run initial scan (10x increments)")
+                print("  set max-size <value>   Set maximum query size (e.g. 1g, 100m)")
+                print("  set timeout <value>    Set query timeout (e.g. 5m, 30s)")
+                print("  quiet/verbose/debug    Set output verbosity")
+                print("  <integer>              Run query of specific size")
+                print("  exit/quit              Exit explore mode")
+
+            elif cmd == "init":
+                if not current_template:
+                    print("No template set.")
+                    continue
+                
+                instantiator = TemplateInstantiator(current_template)
+                self._discover_intervals(instantiator, stats, intervals)
+
+            elif cmd == "set":
+                if len(tokens) < 3:
+                    print("Usage: set <param> <value>")
+                    continue
+                param = tokens[1]
+                value = tokens[2]
+
+                if param == "max-size":
+                    try:
+                        self.max_query_size = parse_size(value)
+                        print(f"max-query-size set to {self.max_query_size}")
+                    except ValueError:
+                        print("Invalid size format. Use 1g, 100m, etc.")
+                elif param == "timeout":
+                    try:
+                        t = parse_time(value)
+                        # In main.py: executor = db_module.create_executor(args)
+                        # engine = StressEngine(executor, ...)
+                        # So self.db_module in Engine IS the executor.
+                        target = self.db_module
+                        if hasattr(self.db_module, 'executor'):
+                             target = self.db_module.executor
+
+                        if hasattr(target, 'timeout'):
+                            setattr(target, 'timeout', t)
+                            print(f"timeout set to {t}s")
+                        else:
+                            print("Executor does not support dynamic timeout update.")
+                    except ValueError:
+                            print("Invalid time format. Use 5m, 30s, etc.")
+                else:
+                    print(f"Unknown parameter: {param}")
+
+            elif cmd in ["quiet", "verbose", "debug"]:
+                # Adjust root logger or console handler
+                level = logging.WARNING
+                if cmd == "verbose": level = logging.INFO
+                if cmd == "debug": level = logging.DEBUG
+                
+                root = logging.getLogger()
+                if level < root.getEffectiveLevel():
+                    root.setLevel(level)
+                # Find console handler
+                for h in root.handlers:
+                    if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler):
+                        h.setLevel(level)
+                print(f"Output level set to {cmd.upper()}")
+
+            elif cmd.isdigit():
+                if not current_template:
+                    print("No template set.")
+                    continue
+                size = int(cmd)
+                instantiator = TemplateInstantiator(current_template)
+                res = self._run_query_for_size(instantiator, size, stats)
+                if res:
+                    effect = self._get_effect(res)
+                    print(f"Result: {effect}")
+                    add_interval(intervals, size, effect)
+                else:
+                    print("Query too large.")
+            
+            else:
+                print(f"Unknown command: {cmd}")

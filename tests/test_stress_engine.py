@@ -1,6 +1,8 @@
 import unittest
 from dataclasses import dataclass
+from unittest.mock import patch
 from sqeeel.stress_engine.engine import StressEngine
+from sqeeel.template_instantiator.instantiator import TemplateInstantiator
 
 @dataclass
 class MockResult:
@@ -64,6 +66,43 @@ class TestStressEngine(unittest.TestCase):
         
         # They should not be the same object
         self.assertIsNot(stats1, stats2)
+
+    def test_discover_intervals(self):
+        t1 = ("P1", "L1", "M1", "R1", "S1")
+        executor = MockExecutor()
+        engine = StressEngine(executor, [t1], 100) # Small limit
+        
+        instantiator = TemplateInstantiator(t1)
+        stats = {}
+        intervals = []
+        
+        engine._discover_intervals(instantiator, stats, intervals)
+        
+        # Check that we have intervals
+        self.assertGreater(len(intervals), 0)
+        # Check that at least one success interval is recorded
+        effects = [i['effect'][0] for i in intervals]
+        self.assertIn("success", effects)
+
+    @patch('builtins.input', side_effect=['init', 'quit'])
+    def test_explore_mode_init(self, mock_input):
+        t1 = ("P1", "L1", "M1", "R1", "S1")
+        executor = MockExecutor()
+        # engine = StressEngine(executor, [t1], 100)
+        # explore mode doesn't use self.templates usually, but we can set it via command
+        # or pass initial string
+        engine = StressEngine(executor, [], 100)
+        
+        template_str = "('P1', 'L1', 'M1', 'R1', 'S1')"
+        
+        # Run explore with initial template
+        # Mocking input to type "init" then "quit"
+        engine.explore(template_str)
+        
+        # We can't easily check internal state of local variables in explore
+        # But if it doesn't crash, it's good sign.
+        # And we can check executor calls
+        self.assertGreater(len(executor.calls), 0)
 
 if __name__ == '__main__':
     unittest.main()

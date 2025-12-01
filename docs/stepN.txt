@@ -32,3 +32,7 @@ Let's expand the tool with quick-scan feature and an interactive mode.
 Show current template and current known intervals before each input.
 This mode should require `--db-type` flag, and allow setting initial values via `--query-timeout`, `--max-query-size`; allow use `--template` to set initial
 template; support `--log`/`--nolog` flags, but in contrary to stress-test, the `--nostats` is assumed default.
+
+>>>>>> Addendum
+
+Please factor out interactive mode out of sqeeel/main into stress engine. Also, check the stress engine itself to see and if you can -- reduce code duplication.
