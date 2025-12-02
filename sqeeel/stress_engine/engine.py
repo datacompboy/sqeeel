@@ -7,6 +7,26 @@ from ..database_modules.base import ExecutionStatus
 from ..stress_engine.intervals import add_interval
 from ..query_generator import parse_template_string
 
+try:
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.completion import NestedCompleter
+    completer = NestedCompleter.from_nested_dict({
+        '(': None,
+        'init': None,
+        'set': {
+            'max-size': None,
+            'timeout': None,
+        },
+        'quiet': None,
+        'verbose': None,
+        'debug': None,
+        'exit': None,
+        'quit': None,
+        'help': None,
+    })
+    prompt = PromptSession(completer=completer).prompt
+except ImportError:
+    prompt = input
 
 def parse_size(value):
     mult = 1
@@ -248,7 +268,7 @@ class StressEngine:
                     print(f"  {i['begin']} - {i['end']}: {i['effect']}")
             
             try:
-                line = input("> ").strip()
+                line = prompt("> ").strip()
             except EOFError:
                 break
             
