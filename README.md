@@ -197,6 +197,37 @@ Automatic finds:
   crashing the whole database server process with all other currently running queries. \
   Report: ...
 
+### CockroachDB
+
+Just a few cases with same effect but different crash sources:
+
+- Template: `('SELECT', '(', '1', ')', '')` \
+  Query: `SELECT((((1))))` \
+  Effect: crash (stack overflow) \
+  Reason: CWE-400 "Uncontrolled Resource Consumption" \
+  Crash is at :  `github.com/cockroachdb/cockroach/pkg/sql/sem/tree.(*ParenExpr).Format`
+  Report: ...
+- Template: `('SELECT LIMIT 0 BETWEEN ', '0 ^ ', '0 ', '', 'AND 0 OFFSET 0')` \
+  Query: `SELECT LIMIT 0 BETWEEN 0 ^ 0 ^ 0 ^ ... 0 ^ 0 AND 0 OFFSET 0` \
+  Effect: crash (stack overflow) \
+  Reason: CWE-400 "Uncontrolled Resource Consumption" \
+  Crash is at : `github.com/cockroachdb/cockroach/pkg/sql/sem/tree.(*BinaryExpr).TypeCheck` \
+  Report: ...
+- Template: `('SELECT LIMIT ', 'CASE ', '0 ', 'WHEN 0 THEN 0 END ', 'OFFSET 0')` \
+  Query: `SELECT LIMIT CASE CASE ... CASE 0 WHEN 0 THEN 0 END ... WHEN 0 THEN 0 END OFFSET 0` \
+  Effect: crash (stack overflow) \
+  Reason: CWE-400 "Uncontrolled Resource Consumption" \
+  Crash is at : `github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder.(*Builder).buildScalar` \
+  Report: ...
+- Template: `('SELECT LIMIT ', 'IFERROR ( ', '0 ', ', 0 ) [ : ] ', 'OFFSET 0')` \
+  Query: `SELECT LIMIT IFERROR ( IFERROR ( IFERROR ( 0, 0 ) [ : ] , 0 ) [ : ] , 0 ) [ : ] OFFSET 0` \
+  Effect: crash (stack overflow) \
+  Reason: CWE-400 "Uncontrolled Resource Consumption" \
+  Crash is at : `github.com/cockroachdb/cockroach/pkg/sql/sem/tree.(*IfErrExpr).Walk` \
+  Report: ...
+
+There are queries that "hung" as well.
+
 ### to be continued
 
 ...

@@ -31,7 +31,8 @@ class CockroachExecutor(DockerExecutor):
                     "--hostname", name, 
                     "--net", self.network_name,
                     self.image_name, 
-                    "start", "--insecure", f"--join={join_args}"
+                    "start", "--insecure", f"--join={join_args}",
+                    "--log={capture-stray-errors: {enable: false}}",  # Capture stack crashes to stderr
                 ]
                 cid = subprocess.check_output(cmd).decode("utf-8").strip()
                 self.container_ids.append(cid)
