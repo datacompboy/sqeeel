@@ -6,12 +6,14 @@ from .docker_db import DockerExecutor
 from .postgresql import PostgresModule
 from .mariadb import MariaDBModule
 from .cockroachdb import CockroachModule
+from .yugabytedb import YugabyteModule
 
 _MODULES = {
     m.name: m for m in [
         PostgresModule(),
         MariaDBModule(),
         CockroachModule(),
+        YugabyteModule(),
     ]
 }
 

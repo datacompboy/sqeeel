@@ -1,0 +1,30 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engines for Postgresql, MariaDB and CockroachDB.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+Now we add an YugabyteDB adapter. The YugabyteDB has two interfaces: YCQL and YSQL, and we should make separate execution adapters for them.
+Also, we should support running as 1-node and distributed, which means we should support 1-node and 3-node execution modes.
+
+The grammar is based on Postgresql, the grammar file is uploaded to grammars/yugabyte-db-parser_gram.y
+(do not read file contents as it 200kb long). Copy the grammar handling rules from current postgresql implementation.
+
+Please propose and ask for explicit confirmation on the architecture of changes to the application and classes structure.
+
+>>> Review answer
+
+I've replaced grammar files:
+    `grammars/yugabyte-db-ycql-parser_gram.y` -- contains grammar for YCQL
+    `yugabyte-db-ysql-gram.y` -- contains grammar for YSQL.
+
+They are different, but both based on postgresql grammar so the initial rewriter rules could be similar, but I will tweak them later to match the lexer and metadata.
+
+The architecture proposal is good for me. Proceed with the implementation plan.
+
