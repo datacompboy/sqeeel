@@ -32,3 +32,11 @@ The architecture proposal is good for me. Proceed with the implementation plan.
 
 The YSQL implementation missing hung & client-hung query detection.
 When query hung is, the bin/ysqlsh still running, and server query still running too, but it is detected as "timeout". The detection logic and recovery should be similar to postgresql one.
+
+>>>>> Addendum
+
+The YCQL implementation is also missing hung & client-hung query detection.
+The observation shows that when query hung is, the client `python /home/yugabyte/bin/ycqlsh.py` is still running, and the result is detected as timeout.
+We need a similar detection logic for YCQL, including attempt to cancel the client via SIGINT first, and cancelling server-side.
+
+YCQL executor incorrectly handles errors and it should also force-finish all queries with semicolon.

@@ -132,8 +132,43 @@ class YugabyteYCQLExecutor(YugabyteBaseExecutor):
             ],
             timeout=timeout,
             test_query="SELECT now() FROM system.local;",
-            # YCQL specific crash detection might differ
+            terminate_query_callback=self._terminate_client,
+            is_query_alive_callback=self._is_client_alive,
+            server_cancel_callback=self._force_kill_client
         )
+
+    def _get_client_pid(self, executor: DockerExecutor) -> Optional[str]:
+        cmd = ["pgrep", "-f", "ycqlsh.py"]
+        try:
+            stdout = executor.exec_cmd(cmd)
+            result = stdout.strip()
+            return result.splitlines()[0] if result else None
+        except Exception:
+            return None
+
+    def _terminate_client(self, proc):
+        pid = self._get_client_pid(self)
+        if pid:
+            cmd = ["kill", "-SIGINT", pid]
+            try:
+                self.exec_cmd(cmd)
+            except Exception:
+                pass
+        
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+
+    def _is_client_alive(self, executor: DockerExecutor) -> Optional[str]:
+        return self._get_client_pid(executor)
+
+    def _force_kill_client(self, executor: DockerExecutor, query_id: str):
+        cmd = ["kill", "-9", query_id]
+        try:
+            executor.exec_cmd(cmd)
+        except Exception:
+            pass
 
 
 class YugabyteModule(DatabaseModule):
