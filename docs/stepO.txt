@@ -28,3 +28,7 @@ They are different, but both based on postgresql grammar so the initial rewriter
 
 The architecture proposal is good for me. Proceed with the implementation plan.
 
+>>>>> Addendum
+
+The YSQL implementation missing hung & client-hung query detection.
+When query hung is, the bin/ysqlsh still running, and server query still running too, but it is detected as "timeout". The detection logic and recovery should be similar to postgresql one.

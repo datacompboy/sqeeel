@@ -85,8 +85,33 @@ class YugabyteYSQLExecutor(YugabyteBaseExecutor):
             init_queries=["CREATE TABLE IF NOT EXISTS x(x int)"],
             timeout=timeout,
             test_query="SELECT 1",
-            crash_detector=self._crash_detector
+            crash_detector=self._crash_detector,
+            is_query_alive_callback=self._is_query_alive,
+            server_cancel_callback=self._server_cancel
         )
+
+    def _is_query_alive(self, executor: DockerExecutor) -> Optional[str]:
+        # Run a query to check if there are any active queries
+        cmd = [
+            "sh", "-c",
+            "exec bin/ysqlsh -h $(hostname) -p 5433 -U yugabyte -d yugabyte -t -A -c \"SELECT pid FROM pg_stat_activity WHERE state='active' and pid != pg_backend_pid()\""
+        ]
+        try:
+            stdout = executor.exec_cmd(cmd)
+            result = stdout.strip()
+            return result if result else None
+        except Exception:
+            return None
+
+    def _server_cancel(self, executor: DockerExecutor, query_id: str):
+        cmd = [
+            "sh", "-c",
+            f"exec bin/ysqlsh -h $(hostname) -p 5433 -U yugabyte -d yugabyte -c \"SELECT pg_cancel_backend({query_id})\""
+        ]
+        try:
+            executor.exec_cmd(cmd)
+        except Exception:
+            pass
 
     def _crash_detector(self, stdout: str, stderr: str) -> bool:
         return "server closed the connection unexpectedly" in stderr or "The connection to the server was lost" in stderr
