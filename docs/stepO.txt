@@ -40,3 +40,49 @@ The observation shows that when query hung is, the client `python /home/yugabyte
 We need a similar detection logic for YCQL, including attempt to cancel the client via SIGINT first, and cancelling server-side.
 
 YCQL executor incorrectly handles errors and it should also force-finish all queries with semicolon.
+
+>>>>> Addendum
+
+Example:
+
+```
+2025-12-03 18:36:39,655 -     Full run stats: DockerExecResult(status='success', error_message=None, duration=0.38978569497703575, exit_code=0, stdout='', stderr='<stdin>:2:Incomplete statement at end of file\n')
+Result: ('success', '')
+```
+
+Now we've got error from the initialization:
+
+```
+RuntimeError: Initialization query failed: CREATE TABLE IF NOT EXISTS x(x int PRIMARY KEY);
+Error: <stdin>:2:InvalidRequest: Error from server: code=2200 [Invalid query] message="No Namespace Used
+CREATE TABLE IF NOT EXISTS x(x int PRIMARY KEY);
+                           ^
+ (ql error -215)"
+ ```
+
+>>>> Addendum
+
+No, the YCQL error handling is still wrong.
+
+first of all, ANY stderr output means error, f.e.:
+
+```
+2025-12-03 18:55:35,538 -   Running query for size 1000 (query size: 2015 bytes)...
+2025-12-03 18:55:36,436 -   Finished in 0.8980s. Effect: ('success', '')
+2025-12-03 18:55:36,436 -     Full run stats: DockerExecResult(status='success', error_message=None, duration=0.8980470669921488, exit_code=0, stdout='', stderr="<stdin>:2:NoHostAvailable: ('Unable to complete the operation against any hosts', {<Host: 172.17.0.2:9042 datacenter1>: ConnectionShutdown('Connection to 172.17.0.2:9042 was closed')})\n")
+```
+
+second: the ConnectionShutdown error looks like signal of crash; at least afterwards no other queries works with:
+```
+2025-12-03 18:55:39,156 -     Full run stats: DockerExecResult(status='success', error_message="Connection error: ('Unable to connect to any servers', {'172.17.0.2:9042': ConnectionRefusedError(11", duration=0.38762560801114887, exit_code=1, stdout='', stderr='Connection error: (\'Unable to connect to any servers\', {\'172.17.0.2:9042\': ConnectionRefusedError(111, "Tried connecting to [(\'172.17.0.2\', 9042)]. Last error: Connection refused")})\n')
+```
+
+Please also keep to the error effect only first line of the stderr:
+
+```
+  100 - 100: ('error', '<stdin>:2:SyntaxException: <Error from server: code=2000 [Syntax error in CQL query] message="Invalid CQL Statement. Only one selected table is allowed\nselect x  from x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x;\n               ^\n (ql error -12)">')
+```
+
+should become just ('error', '<stdin>:2:SyntaxException: <Error from server: code=2000 [Syntax error in CQL query] message="Invalid CQL Statement. Only one selected table is allowed')
+
+Like that done for other databases.

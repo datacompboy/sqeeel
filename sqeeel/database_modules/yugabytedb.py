@@ -127,14 +127,22 @@ class YugabyteYCQLExecutor(YugabyteBaseExecutor):
             env={},
             init_queries=[
                 "CREATE KEYSPACE IF NOT EXISTS k WITH REPLICATION = {'class': 'SimpleStrategy', 'replication_factor': 1};",
-                "USE k;",
                 "CREATE TABLE IF NOT EXISTS x(x int PRIMARY KEY);"
             ],
             timeout=timeout,
             test_query="SELECT now() FROM system.local;",
             terminate_query_callback=self._terminate_client,
             is_query_alive_callback=self._is_client_alive,
-            server_cancel_callback=self._force_kill_client
+            server_cancel_callback=self._force_kill_client,
+            crash_detector=self._crash_detector
+        )
+
+    def _crash_detector(self, stdout: str, stderr: str) -> bool:
+        return (
+            "ConnectionShutdown" in stderr or
+            "ConnectionRefusedError" in stderr or
+            "NoHostAvailable" in stderr or
+            "Connection to" in stderr and "was closed" in stderr
         )
 
     def _get_client_pid(self, executor: DockerExecutor) -> Optional[str]:
@@ -169,6 +177,29 @@ class YugabyteYCQLExecutor(YugabyteBaseExecutor):
             executor.exec_cmd(cmd)
         except Exception:
             pass
+
+    def run_query(self, query: str) -> DockerExecResult:
+        # Force semicolon
+        clean_query = query.strip()
+        if clean_query and not clean_query.endswith(";"):
+            clean_query += ";"
+        
+        # Prepend USE k; to generated queries to handle session isolation
+        # Skip for test_query (k might not exist yet) and CREATE KEYSPACE
+        if query != self.test_query and not clean_query.lower().startswith("create keyspace"):
+            clean_query = "USE k; " + clean_query
+
+        result = super().run_query(clean_query)
+        
+        # YCQL client might exit with 0 even on error, so we check stderr
+        if result.exit_code == 0 and result.status == "success" and result.stderr:
+            # Any stderr output means error for YCQL
+            result.exit_code = 1
+            # Keep only the first line of stderr
+            lines = result.stderr.strip().splitlines()
+            result.error_message = lines[0] if lines else ""
+        
+        return result
 
 
 class YugabyteModule(DatabaseModule):
