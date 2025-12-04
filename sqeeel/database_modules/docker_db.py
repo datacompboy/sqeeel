@@ -200,7 +200,9 @@ class DockerExecutor(Executor[DockerExecResult]):
             raise RuntimeError("Container is not running. Call start() first.")
 
         cmd = ["docker", "exec", "-i", self._container_id] + self.client_command
-        
+        return self._execute_process(cmd, query)
+
+    def _execute_process(self, cmd: List[str], input_text: str) -> DockerExecResult:
         start_time = time.monotonic()
         
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -211,9 +213,11 @@ class DockerExecutor(Executor[DockerExecResult]):
         status = ExecutionStatus.SUCCESS
         
         try:
-            stdout, stderr = proc.communicate(input=query, timeout=self.timeout)
+            stdout, stderr = proc.communicate(input=input_text, timeout=self.timeout)
             exit_code = proc.returncode
+            end_time = time.monotonic()
         except subprocess.TimeoutExpired:
+            end_time = time.monotonic()
             # 1. Client cancel
             if self.terminate_query_callback:
                 self.terminate_query_callback(proc)
@@ -271,7 +275,6 @@ class DockerExecutor(Executor[DockerExecResult]):
             if not self._is_container_running():
                 status = ExecutionStatus.CRASH
 
-        end_time = time.monotonic()
         duration = end_time - start_time
 
         if len(stdout) > 11005:

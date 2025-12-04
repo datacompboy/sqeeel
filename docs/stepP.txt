@@ -1,0 +1,82 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engines for Postgresql, MariaDB, CockroachDB, YugabyteDB.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+Now we add an Firebolt adapter. We should support running as 1-node and distributed, which means we should support 1-node and 3-node execution modes.
+
+The grammar is Postgresql-compliant, so for now just subclass / redirect grammar functions to Postgresql grammar class.
+
+>>>>>> Addendum
+
+For firebolt testing we can't use "psql" inside of the container. It supports commands running via HTTP POST, so you could use curl on the host.
+
+Consult with https://github.com/firebolt-db/firebolt-core?tab=readme-ov-file#get-started  if you need to.
+
+>>>>>> Addendum
+
+The hung query detection does not work: to check currently active queries you could use
+
+```
+SELECT query_id FROM information_schema.engine_running_queries where e2e_duration_us>1000000;
+```
+
+And attempt to cancel query via
+
+cancel query where query_id='${query_id}';
+
+>>>>>> Addendum
+
+Great; now don't forget to run curl with "--fail-with-body" flag, so if server returns non-200 response (i.e. error) it will be signalled as non-zero curl exit code.
+
+And for parsing the exit code, the result need to be checked:
+if exit code is 22, that means server returned error.
+Check the output, if first symbol is "{" then the result is error JSON, and you need to extract errors/description out of it to make it error message:
+
+```
+{
+  "errors": [
+    {
+      "description": "Line 1, Column 8: Column 'xquery_id' does not exist. Did you mean: engine_running_queries.query_id?"
+    }
+  ],
+  "query": {
+    "query_id": "1f788f71-5b6d-4994-af93-2896376f7dff",
+    "query_label": null,
+    "request_id": "a8869109-c7a0-46c9-bfae-be9fa4406024"
+  },
+  "statistics": {
+    "elapsed": 0.0
+  }
+}
+```
+
+If the output is not beginning with "{", then the output should be considered some other error -- use stdout as is for the message for now, will see how to parse it later.
+
+>>>>>>>
+
+Great. In case of successful extraction of err_json["errors"][0]["description"], please also cut out the 1st line out of it, so we don't clutter the query copy into error message:
+
+```
+2025-12-04 22:44:14,633 -   Finished in 0.0063s. Effect: ('error', "Line 1, Column 8: syntax error, unexpected ',', expecting end of file\nSELECT ,,,,,,,,,,\n       ^")
+```
+Should become to
+  ('error', "Line 1, Column 8: syntax error, unexpected ',', expecting end of file")
+like other engines
+
+>>>>>>>
+
+Great. Error parsing is now stable, but detecting the hung queries does not work. The query hang, but it does not looks like the code tried to check is query alive on the server. It looks like because run_query you reimplemented it and the hang query detection logic was lost.
+Please read the other executors and reconsider how to generalize logic so the hung detection will be correct regardless of how query is executed.
+While "SIGINT in docker" logic is unique for docker-based client executor, the check query health on server and try to cancel it from the server and ensure it removed are logic universal to any execution method.
+
+>>>>>>>
+
+Please find way to refactor ALL executor modules to track timeout/hang correctly: right now it looks like the database recovery time is included, while we only interested in time until the signal is clear. I.e. if query is hung out, the execution time need to be until the moment we tried to cancel and it did not respond. I.e. find the way to do database recovery outside of execution time measurement.

@@ -7,6 +7,7 @@ from .postgresql import PostgresModule
 from .mariadb import MariaDBModule
 from .cockroachdb import CockroachModule
 from .yugabytedb import YugabyteModule
+from .firebolt import FireboltModule
 
 _MODULES = {
     m.name: m for m in [
@@ -14,6 +15,7 @@ _MODULES = {
         MariaDBModule(),
         CockroachModule(),
         YugabyteModule(),
+        FireboltModule(),
     ]
 }
 
