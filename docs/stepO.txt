@@ -86,3 +86,16 @@ Please also keep to the error effect only first line of the stderr:
 should become just ('error', '<stdin>:2:SyntaxException: <Error from server: code=2000 [Syntax error in CQL query] message="Invalid CQL Statement. Only one selected table is allowed')
 
 Like that done for other databases.
+
+>>>>> Fixing multi-node startup
+
+`--yb-nodes 3` does not work, it still only runs single node; the 2nd and 3rd nodes failing with error:
+
+```
+$ docker logs sqeeel-yb-ycql-2
+Fetching configs from join IP...
+ERROR: Node at the join ip provided is not reachable.
+For more information, check the logs in /root/var/logs
+```
+
+but it doesn't detect that startup is not successful.

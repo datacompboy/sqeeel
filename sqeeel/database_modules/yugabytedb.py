@@ -50,9 +50,18 @@ class YugabyteBaseExecutor(DockerExecutor):
                 # print(f"Starting {name} with {cmd}")
                 subprocess.check_call(cmd, stdout=subprocess.DEVNULL)
                 
-                # Wait a bit for the first node to be ready before starting others?
-                if i == 0 and self.nodes > 1:
-                    time.sleep(5) 
+                # If distributed, wait for each node to be ready before proceeding to the next
+                # This ensures stable clustering
+                if self.nodes > 1:
+                    print(f"Waiting for {name} to be ready...")
+                    ready = False
+                    for _ in range(60):
+                        time.sleep(1)
+                        if self._is_node_ready(name):
+                            ready = True
+                            break
+                    if not ready:
+                        raise RuntimeError(f"Node {name} failed to become ready.")
 
             self.container_name = self.container_names[0]
             self._container_id = subprocess.check_output(
@@ -62,6 +71,38 @@ class YugabyteBaseExecutor(DockerExecutor):
         except Exception as e:
             self.stop()
             raise e
+
+    def _is_node_ready(self, container_name: str) -> bool:
+        cmd = ["docker", "exec", container_name, "bin/yugabyted", "status"]
+        try:
+            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode()
+            for line in output.splitlines():
+                if "Status" in line and "Running" in line:
+                    return True
+            return False
+        except Exception:
+            return False
+
+    def wait_for_ready(self):
+        # Check that all cluster nodes are actually running
+        for name in self.container_names:
+            if not self._is_container_running_name(name):
+                logs = ""
+                try:
+                    logs = subprocess.check_output(["docker", "logs", name]).decode()[-1000:]
+                except Exception:
+                    pass
+                raise RuntimeError(f"Container {name} crashed or exited unexpectedly.\nLogs:\n{logs}")
+        
+        super().wait_for_ready()
+
+    def _is_container_running_name(self, name: str) -> bool:
+        try:
+             cmd = ["docker", "inspect", "-f", "{{.State.Running}}", name]
+             out = subprocess.check_output(cmd, text=True).strip()
+             return out == "true"
+        except subprocess.CalledProcessError:
+             return False
 
     def stop(self):
         for name in self.container_names:
