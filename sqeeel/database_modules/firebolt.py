@@ -146,7 +146,10 @@ class FireboltExecutor(DockerExecutor):
                      err_json = json.loads(out_str)
                      if "errors" in err_json and err_json["errors"]:
                          desc = err_json["errors"][0]["description"]
-                         result.error_message = desc.splitlines()[0] if desc else ""
+                         msg = desc.splitlines()[0] if desc else ""
+                         if msg.startswith("Line 1, Column "):
+                            msg = msg.split(":", 1)[1].strip()
+                         result.error_message = msg
                      else:
                          result.error_message = out_str
                  except Exception:
