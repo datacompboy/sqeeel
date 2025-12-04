@@ -121,7 +121,7 @@ class YugabyteYSQLExecutor(YugabyteBaseExecutor):
             image_name=image_name,
             nodes=nodes,
             container_name=container_name,
-            client_command=["sh", "-c", "exec bin/ysqlsh -h $(hostname) -p 5433 -U yugabyte -d yugabyte --echo-all"],
+            client_command=["sh", "-c", "exec bin/ysqlsh -h $(hostname) -p 5433 -U yugabyte -d yugabyte -v ON_ERROR_STOP=1 --echo-all"],
             env={},
             init_queries=["CREATE TABLE IF NOT EXISTS x(x int)"],
             timeout=timeout,
@@ -130,6 +130,21 @@ class YugabyteYSQLExecutor(YugabyteBaseExecutor):
             is_query_alive_callback=self._is_query_alive,
             server_cancel_callback=self._server_cancel
         )
+
+    def run_query(self, query: str) -> DockerExecResult:
+        result = super().run_query(query)
+        
+        # Check for errors in stderr if exit code is 0
+        if result.exit_code == 0 and result.status == "success" and result.stderr:
+             if "ERROR:" in result.stderr or "FATAL:" in result.stderr or "PANIC:" in result.stderr:
+                 result.exit_code = 1
+        
+        # Format error message to be first line only
+        if result.exit_code != 0 and result.stderr:
+             lines = result.stderr.strip().splitlines()
+             result.error_message = lines[0] if lines else ""
+             
+        return result
 
     def _is_query_alive(self, executor: DockerExecutor) -> Optional[str]:
         # Run a query to check if there are any active queries
