@@ -4,13 +4,14 @@ import sys
 from io import StringIO
 from sqeeel.stress_engine.engine import StressEngine
 from sqeeel.database_modules.base import ExecutionStatus, ExecResult
+from sqeeel.stress_engine.intervals import add_interval
 
 class TestStressEngineInteractive(unittest.TestCase):
     def setUp(self):
         self.mock_db = MagicMock()
         self.mock_executor = MagicMock()
         self.mock_db.executor = self.mock_executor
-        self.mock_db.run_query.return_value = ExecResult(status=ExecutionStatus.SUCCESS, duration=0.1)
+        self.mock_db.run_query.return_value = ExecResult(status=ExecutionStatus.SUCCESS, duration=0.1, exit_code=0)
         
         # Mock stop/start/wait
         self.mock_db.stop = MagicMock()
@@ -111,6 +112,94 @@ class TestStressEngineInteractive(unittest.TestCase):
         # Check if it was listed
         self.assertIn("1: Q1", output)
         self.assertIn("Q1", engine.extra_queries)
+
+    def test_fill_gaps_step(self):
+        engine = StressEngine(self.mock_db, [])
+        stats = {}
+        # Initial intervals: [100, 100] Success, [200, 200] Success. Gap: 101-199.
+        intervals = [
+            {"begin": 100, "end": 100, "effect": ("success", "")},
+            {"begin": 200, "end": 200, "effect": ("success", "")}
+        ]
+        
+        # Mock instantiator
+        mock_instantiator = MagicMock()
+        mock_instantiator.instantiate.return_value = "SELECT ..."
+        
+        # Expect middle = 150
+        merged, crashed = engine._fill_gaps_step(mock_instantiator, stats, intervals)
+        
+        self.mock_db.run_query.assert_called()
+        # Verify 150 was run
+        self.assertIn(150, stats)
+        # Verify intervals updated: should have 3 intervals now (since middle 150 success same as neighbors, wait)
+        # If middle is success, and neighbors are success, they should merge?
+        # 100-100 (S), 150-150 (S), 200-200 (S).
+        # Logic: 
+        # effect == effect1 (Success == Success) -> new_intervals[-1]["end"] = middle -> 100-150
+        # Loop continues. Next interval is 200-200.
+        # Check merge with previous (100-150): 150 == 200-1? No.
+        # So we get 100-150, 200-200.
+        
+        self.assertEqual(len(intervals), 2)
+        self.assertEqual(intervals[0]["end"], 150)
+        self.assertTrue(merged)
+
+    def test_fill_gaps_bounds(self):
+        engine = StressEngine(self.mock_db, [])
+        stats = {}
+        # [100, 100], [200, 200], [300, 300]
+        intervals = [
+            {"begin": 100, "end": 100, "effect": ("success", "")},
+            {"begin": 200, "end": 200, "effect": ("success", "")},
+            {"begin": 300, "end": 300, "effect": ("success", "")}
+        ]
+        mock_instantiator = MagicMock()
+        mock_instantiator.instantiate.return_value = "SELECT ..."
+
+        # Run with bounds 200-300. Gap 100-200 should be ignored. Gap 200-300 processed.
+        merged, _ = engine._fill_gaps_step(mock_instantiator, stats, intervals, bounds=(200, 300))
+        
+        # Middle of 200-300 is 250.
+        # Middle of 100-200 is 150.
+        # We expect run at 250, NOT 150.
+        
+        calls = [c.args[0] for c in mock_instantiator.instantiate.call_args_list]
+        self.assertIn(250, calls)
+        self.assertNotIn(150, calls)
+
+    @patch('sqeeel.stress_engine.engine.prompt')
+    @patch('sqeeel.stress_engine.engine.TemplateInstantiator')
+    @patch('sqeeel.stress_engine.engine.parse_template_string')
+    def test_explore_range_command(self, mock_parse, mock_instantiator_cls, mock_prompt):
+        # Test range command: 100..200
+        mock_prompt.side_effect = ["100..200", "exit"]
+        mock_parse.return_value = ("TPL",)
+        
+        mock_inst = MagicMock()
+        mock_inst.instantiate.side_effect = lambda size: f"SELECT {size}"
+        mock_instantiator_cls.return_value = mock_inst
+
+        # Mock DB to return success for 100, timeout for 200 to prevent merge
+        def side_effect(query):
+            if "100" in query:
+                return ExecResult(status=ExecutionStatus.SUCCESS, exit_code=0)
+            if "200" in query:
+                return ExecResult(status=ExecutionStatus.TIMEOUT)
+            # Middle 150
+            return ExecResult(status=ExecutionStatus.SUCCESS, exit_code=0)
+            
+        self.mock_db.run_query.side_effect = side_effect
+
+        engine = StressEngine(self.mock_db, [])
+        
+        engine.explore("TPL")
+        
+        # Should run 100, 200 (boundaries), then gap fill (150...)
+        calls = [c.args[0] for c in mock_inst.instantiate.call_args_list]
+        self.assertIn(100, calls)
+        self.assertIn(200, calls)
+        self.assertIn(150, calls)
 
 if __name__ == '__main__':
     unittest.main()

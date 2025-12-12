@@ -33,3 +33,38 @@ should run "SELECT 1" query against the database; it logged as usual, but should
 
    Commands to the extra list may also be specified on the command line for both explore and stress-test run modes via --extra "some query" flag.
    Flag may be specified several times to run several queries one by one every time database needs restart.
+
+>>>>>> Addendum
+
+Let's also add an ability to run an exploration loop.
+
+Right now "init" just runs multiple queries with inrease of 10 from 1 to max-size; and just a number runs query at given size.
+
+We need now to implement interactive gap filling. Let's do it following way.
+
+The "Known Intervals:" list should print not only the range, but also number them, e.g.:
+
+```
+Known Intervals:
+( 0)  100000 - 200000: ('success', '')
+( 1)  300000 - 500000: ('crash', '')
+(  )  500000 - 1000000: ('timeout', '')
+```
+
+(note the empty last brackets -- it's number of gap after).
+The "gap" commands should run the exploration loop between end of numbered line and the next one.
+I mean, "gap 0" should run exploration between 200000 and 300000.
+
+And the second exploration is an explicit-range request by the user.
+Let's add support for range command: i.e. `number .. number`.
+So the input `1..1000` or `1 .. 1000` will mean check if 1 or 1000 are known, and if not -- run at them.
+And then check, if there is a gap between 1 and 1000 -- run exploration between these two numbers.
+
+Which means, in the "Known Intervals" example above, running:
+  "gap 0" should do the scan between 200000 and 300000, starting from run at 250000
+  "200000..300000" should do the same, doing first run at 250000
+  "200001..299999" should first run 200001, then 299999, and then explore between them.
+  "100500..500500" should act like it closes both gaps.
+
+Make sure the range exploration logic is factored out to subfunction so there is no code copy-paste.
+Since the both ends are previously ran, we should avoid running at the boundaries and just do in-between.

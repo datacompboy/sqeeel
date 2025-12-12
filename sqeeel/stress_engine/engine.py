@@ -12,21 +12,22 @@ try:
     from prompt_toolkit.completion import NestedCompleter
     completer = NestedCompleter.from_nested_dict({
         '(': None,
+        'debug': None,
+        'exit': None,
+        'extra-clean': None,
+        'extra': None,
+        'gap': None,
+        'help': None,
         'init': None,
+        'q': None,
+        'query': None,
+        'quiet': None,
+        'quit': None,
         'set': {
             'max-size': None,
             'timeout': None,
         },
-        'quiet': None,
         'verbose': None,
-        'debug': None,
-        'exit': None,
-        'quit': None,
-        'help': None,
-        'q': None,
-        'query': None,
-        'extra': None,
-        'extra-clean': None,
     })
     prompt = PromptSession(completer=completer).prompt
 except ImportError:
@@ -105,6 +106,73 @@ class StressEngine:
             logging.info(f"Running {len(self.extra_queries)} extra queries...")
             for q in self.extra_queries:
                 self.db_module.run_query(q)
+
+    def _fill_gaps_step(self, instantiator, stats, intervals, bounds=None):
+        """
+        Performs one pass of gap filling.
+        Returns (merged, quick_crashed)
+        """
+        merged = False
+        new_intervals = []
+        if not intervals:
+            return False, False
+        
+        new_intervals.append(intervals[0])
+        quick_crashed = False
+        
+        for i in range(len(intervals) - 1):
+            end1 = new_intervals[-1]["end"]
+            effect1 = new_intervals[-1]["effect"]
+            begin2, end2, effect2 = intervals[i+1]["begin"], intervals[i+1]["end"], intervals[i+1]["effect"]
+            
+            if end1 + 1 < begin2:
+                in_bounds = True
+                if bounds:
+                    # Gap is (end1, begin2) exclusive
+                    # Check if gap is within bounds (inclusive)
+                    # We want to fill gaps that are strictly inside the requested range
+                    if end1 < bounds[0] or begin2 > bounds[1]:
+                        in_bounds = False
+
+                if in_bounds:
+                    middle = (end1 + begin2) // 2
+                    if self.quick:
+                        is_hang1 = (effect1[0] == "hang")
+                        is_hang2 = (effect2[0] == "hang")
+                        if is_hang1 != is_hang2:
+                            diff = begin2 - end1
+                            step = max(1, diff // 3)
+                            if is_hang2:
+                                middle = end1 + step
+                            else:
+                                middle = begin2 - step
+
+                    result = self._run_query_for_size(instantiator, middle, stats)
+                    effect = self._get_effect(result)
+
+                    if self.quick and effect[0] == "crash":
+                        logging.warning("Crash observed during gap closing. Terminating.")
+                        quick_crashed = True
+                        new_intervals.append({"begin": middle, "end": middle, "effect": effect})
+                        new_intervals.extend(intervals[i+1:])
+                        intervals[:] = new_intervals
+                        return False, True
+
+                    if effect == effect1:
+                        new_intervals[-1]["end"] = middle
+                    elif effect == effect2:
+                        intervals[i+1]["begin"] = middle
+                    else:
+                        new_intervals.append({"begin": middle, "end": middle, "effect": effect})
+                    merged = True
+
+            if new_intervals[-1]["end"] == intervals[i+1]["begin"] -1 and new_intervals[-1]["effect"] == intervals[i+1]["effect"]:
+                new_intervals[-1]["end"] = intervals[i+1]["end"]
+            else:
+                new_intervals.append(intervals[i+1])
+
+        intervals[:] = new_intervals
+        return merged, quick_crashed
 
     def _recover_database(self):
         """
@@ -185,55 +253,7 @@ class StressEngine:
 
         # 2. Close the gaps
         while not quick_crashed:
-            merged = False
-            new_intervals = []
-            if not intervals:
-                break
-            new_intervals.append(intervals[0])
-            for i in range(len(intervals) - 1):
-                end1 = new_intervals[-1]["end"]
-                effect1 = new_intervals[-1]["effect"]
-                begin2, end2, effect2 = intervals[i+1]["begin"], intervals[i+1]["end"], intervals[i+1]["effect"]
-
-                if end1 + 1 < begin2:
-                    middle = (end1 + begin2) // 2
-                    if self.quick:
-                        is_hang1 = (effect1[0] == "hang")
-                        is_hang2 = (effect2[0] == "hang")
-                        if is_hang1 != is_hang2:
-                            diff = begin2 - end1
-                            step = max(1, diff // 3)
-                            if is_hang2:
-                                middle = end1 + step
-                            else:
-                                middle = begin2 - step
-
-                    result = self._run_query_for_size(instantiator, middle, stats)
-                    effect = self._get_effect(result)
-
-                    if self.quick and effect[0] == "crash":
-                        logging.warning("Crash observed during gap closing. Terminating.")
-                        quick_crashed = True
-                        new_intervals.append({"begin": middle, "end": middle, "effect": effect})
-                        new_intervals.extend(intervals[i+1:])
-                        merged = False
-                        break
-
-                    if effect == effect1:
-                        new_intervals[-1]["end"] = middle
-                    elif effect == effect2:
-                        intervals[i+1]["begin"] = middle
-                    else:
-                        new_intervals.append({"begin": middle, "end": middle, "effect": effect})
-                    merged = True
-
-                if new_intervals[-1]["end"] == intervals[i+1]["begin"] -1 and new_intervals[-1]["effect"] == intervals[i+1]["effect"]:
-                    new_intervals[-1]["end"] = intervals[i+1]["end"]
-                else:
-                    new_intervals.append(intervals[i+1])
-
-
-            intervals = new_intervals
+            merged, quick_crashed = self._fill_gaps_step(instantiator, stats, intervals)
             if not merged:
                 break
         logging.warning(f"Stress results for template {template}:")
@@ -277,8 +297,11 @@ class StressEngine:
             print(f"\nCurrent Template: {current_template}")
             if intervals:
                 print("Known Intervals:")
-                for i in sorted(intervals, key=lambda x: x['begin']):
-                    print(f"  {i['begin']} - {i['end']}: {i['effect']}")
+                intervals.sort(key=lambda x: x['begin'])
+                for i, interval in enumerate(intervals):
+                    print(f"(  )  {interval['begin']} - {interval['end']}: {interval['effect']}")
+                    if i < len(intervals) - 1 and interval['end'] + 1 < intervals[i+1]['begin']:
+                        print(f"({i:2})  {interval['end']} - {intervals[i+1]['begin']}: [gap]")
             
             try:
                 line = prompt("> ").strip()
@@ -334,6 +357,8 @@ class StressEngine:
                 print("  extra <sql>            Run SQL and add to recovery list")
                 print("  extra                  List extra queries")
                 print("  extra-clean            Clear extra queries list")
+                print("  gap <index>            Explore gap after interval <index>")
+                print("  <start>..<end>         Explore range (e.g. 100..200)")
                 print("  <integer>              Run query of specific size")
                 print("  exit/quit              Exit explore mode")
 
@@ -377,6 +402,61 @@ class StressEngine:
                 
                 instantiator = TemplateInstantiator(current_template)
                 self._discover_intervals(instantiator, stats, intervals)
+
+            elif cmd == "gap":
+                if len(tokens) < 2:
+                    print("Usage: gap <index>")
+                    continue
+                try:
+                    idx = int(tokens[1])
+                    if idx < 0 or idx >= len(intervals) - 1:
+                        print("Invalid gap index (must be between intervals)")
+                        continue
+                    
+                    min_b = intervals[idx]['end']
+                    max_b = intervals[idx+1]['begin']
+                    
+                    print(f"Exploring gap {idx} ({min_b} .. {max_b})...")
+                    instantiator = TemplateInstantiator(current_template)
+                    while True:
+                        merged, _ = self._fill_gaps_step(instantiator, stats, intervals, bounds=(min_b, max_b))
+                        if not merged:
+                            break
+                except ValueError:
+                    print("Invalid index.")
+
+            elif ".." in cmd:
+                # Range exploration
+                try:
+                    parts = cmd.split("..")
+                    start = int(parts[0].strip())
+                    end = int(parts[1].strip())
+                    
+                    if not current_template:
+                        print("No template set.")
+                        continue
+
+                    instantiator = TemplateInstantiator(current_template)
+                    
+                    # Ensure boundaries are run
+                    if start not in stats:
+                         res = self._run_query_for_size(instantiator, start, stats)
+                         effect = self._get_effect(res)
+                         add_interval(intervals, start, effect)
+                    
+                    if end not in stats:
+                         res = self._run_query_for_size(instantiator, end, stats)
+                         effect = self._get_effect(res)
+                         add_interval(intervals, end, effect)
+                    
+                    print(f"Exploring range {start} .. {end}...")
+                    while True:
+                        merged, _ = self._fill_gaps_step(instantiator, stats, intervals, bounds=(start, end))
+                        if not merged:
+                            break
+
+                except ValueError:
+                    print("Invalid range format (e.g. 100..200)")
 
             elif cmd == "set":
                 if len(tokens) < 3:
