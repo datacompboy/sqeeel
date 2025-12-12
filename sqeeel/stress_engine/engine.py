@@ -23,6 +23,10 @@ try:
         'exit': None,
         'quit': None,
         'help': None,
+        'q': None,
+        'query': None,
+        'extra': None,
+        'extra-clean': None,
     })
     prompt = PromptSession(completer=completer).prompt
 except ImportError:
@@ -60,12 +64,13 @@ class StressEngine:
     Creates templates generator, loops over chosen templates, and for each
     runs a stress loop for some chosen sizes.
     """
-    def __init__(self, db_module, templates, max_query_size=32*1024*1024, verbose=False, quick=False):
+    def __init__(self, db_module, templates, max_query_size=32*1024*1024, verbose=False, quick=False, extra_queries=None):
         self.db_module = db_module
         self.templates = templates
         self.max_query_size = max_query_size
         self.verbose = verbose
         self.quick = quick
+        self.extra_queries = extra_queries if extra_queries is not None else []
 
     def _get_effect(self, result):
         """
@@ -95,6 +100,12 @@ class StressEngine:
             error_msg = result.stderr[:100]
         return "error", error_msg
 
+    def _run_extra_queries(self):
+        if self.extra_queries:
+            logging.info(f"Running {len(self.extra_queries)} extra queries...")
+            for q in self.extra_queries:
+                self.db_module.run_query(q)
+
     def _recover_database(self):
         """
         Recovers the database by restarting it.
@@ -104,6 +115,7 @@ class StressEngine:
             self.db_module.stop()
             self.db_module.start()
             self.db_module.wait_for_ready()
+            self._run_extra_queries()
             logging.warning("Database recovered successfully.")
         except Exception:
             logging.exception("Failed to recover database.")
@@ -113,8 +125,7 @@ class StressEngine:
         """
         Instantiates and runs a query for a given size.
         """
-        if size in stats:
-            return stats[size]
+        # We always run the query, even if it's in stats, to update the result
         
         query = instantiator.instantiate(size)
         query_size = len(query)
@@ -236,6 +247,7 @@ class StressEngine:
         Run the stress test.
         """
         logging.warning("Starting stress test...")
+        self._run_extra_queries()
         results = {}
         for template in self.templates:
             logging.warning(f"Processing template: {template}")
@@ -258,6 +270,7 @@ class StressEngine:
         intervals = []
 
         print("Entering explore mode. Type 'help' for commands.")
+        self._run_extra_queries()
 
         while True:
             # Show state
@@ -317,8 +330,45 @@ class StressEngine:
                 print("  set max-size <value>   Set maximum query size (e.g. 1g, 100m)")
                 print("  set timeout <value>    Set query timeout (e.g. 5m, 30s)")
                 print("  quiet/verbose/debug    Set output verbosity")
+                print("  q / query <sql>        Run raw SQL query")
+                print("  extra <sql>            Run SQL and add to recovery list")
+                print("  extra                  List extra queries")
+                print("  extra-clean            Clear extra queries list")
                 print("  <integer>              Run query of specific size")
                 print("  exit/quit              Exit explore mode")
+
+            elif cmd == "q" or cmd == "query":
+                query = cmd_part[len(cmd):].strip()
+                if not query:
+                    print("Usage: q <sql>")
+                    continue
+                logging.info(f"Running raw query: {query}")
+                result = self.db_module.run_query(query)
+                effect = self._get_effect(result)
+                logging.info(f"Finished in {result.duration:.4f}s. Effect: {effect}")
+                if result.status in [ExecutionStatus.HANG, ExecutionStatus.CRASH]:
+                     self._recover_database()
+
+            elif cmd == "extra":
+                query = cmd_part[len(cmd):].strip()
+                if not query:
+                    # List extra queries
+                    print("Extra queries:")
+                    for i, q in enumerate(self.extra_queries):
+                        print(f"  {i+1}: {q}")
+                    continue
+                
+                logging.info(f"Adding and running extra query: {query}")
+                self.extra_queries.append(query)
+                result = self.db_module.run_query(query)
+                effect = self._get_effect(result)
+                logging.info(f"Finished in {result.duration:.4f}s. Effect: {effect}")
+                if result.status in [ExecutionStatus.HANG, ExecutionStatus.CRASH]:
+                     self._recover_database()
+
+            elif cmd == "extra-clean":
+                self.extra_queries = []
+                print("Extra queries list cleared.")
 
             elif cmd == "init":
                 if not current_template:

@@ -173,7 +173,7 @@ def run_explore_mode(args):
         logging.warning("Database container started.")
 
         # Use StressEngine as helper
-        engine = StressEngine(executor, [], max_query_size=args.max_query_size, verbose=args.verbose)
+        engine = StressEngine(executor, [], max_query_size=args.max_query_size, verbose=args.verbose, extra_queries=args.extra)
         engine.explore(args.template)
 
     except Exception:
@@ -204,7 +204,7 @@ def run_stress_test(args):
         
         logging.info(f"Running stress test with {len(templates)} templates.")
 
-        stress_engine = StressEngine(executor, templates, max_query_size=args.max_query_size, verbose=args.verbose, quick=args.quick)
+        stress_engine = StressEngine(executor, templates, max_query_size=args.max_query_size, verbose=args.verbose, quick=args.quick, extra_queries=args.extra)
         
         results = stress_engine.run()
 
@@ -329,6 +329,12 @@ def main():
         action="store_true",
         help="Enable quick scan mode."
     )
+    stress_parser.add_argument(
+        "--extra",
+        action="append",
+        help="Extra SQL query to run on startup and recovery.",
+        default=[]
+    )
 
     # Dynamic module args
     if pre_args.db_type:
@@ -385,6 +391,12 @@ def main():
         "-v", "--verbose",
         action="store_true",
         help="Enable verbose output.",
+    )
+    explore_parser.add_argument(
+        "--extra",
+        action="append",
+        help="Extra SQL query to run on startup and recovery.",
+        default=[]
     )
 
     if pre_args.db_type:

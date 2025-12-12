@@ -1,0 +1,35 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engines for Postgresql, MariaDB, CockroachDB, YugabyteDB.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+Let's improve interactive "explore" run method.
+
+It needs additional commands:
+
+1. "query" or short-cut "q": run given sql query as is, without template-processing it.
+example:
+
+  `q SELECT 1`
+
+should run "SELECT 1" query against the database; it logged as usual, but should not be cached nor written into intervals.
+
+2. Whenever size is given, it should be ran no matter what -- i.e. even if we already ran that size, we still run with that size.
+   Actually, that change is okay even for stress-test: all we care is to record last execution per size, but we do not rely on the cache to decide run or not.
+
+3. "extra": the given SQL is added to the list of SQL queries that should be run whenever the database recovery is done.
+   it means, after `extra CREATE TABLE q(q int)`, the SQL command "CREATE TABLE q(q int)" should be immediately executed,
+   and whenever database needs to be restarted (e.g. due to crash or hung), the command needs to be run again.
+
+   "extra" without argument should show all the extra commands currently in the queue.
+   "extra-clean" should clear the list.
+
+   Commands to the extra list may also be specified on the command line for both explore and stress-test run modes via --extra "some query" flag.
+   Flag may be specified several times to run several queries one by one every time database needs restart.
