@@ -7,16 +7,20 @@ from sqeeel.query_generator.grammar_parser import parse_grammar
 from sqeeel.query_generator.graph_builder import build_graph
 
 QueryTemplate = namedtuple('QueryTemplate', ['prefix', 'left', 'middle', 'right', 'suffix'])
-def parse_template_string(template_str: str) -> QueryTemplate:
+def parse_template_string(template_str: str) -> Tuple:
     try:
         tpl = ast.literal_eval(template_str)
-        if not isinstance(tpl, (tuple, list)) or len(tpl) != 5:
-            raise ValueError("Template must be a 5-tuple of strings")
+        if not isinstance(tpl, (tuple, list)):
+            raise ValueError("Template must be a tuple of strings")
         if not all(isinstance(x, str) for x in tpl):
-            raise ValueError("Template must be a 5-tuple of strings")
-        if len(tpl[1]) + len(tpl[3]) == 0:
-            raise ValueError("Template must have non-empty left or right part")
-        return QueryTemplate(*tpl)
+            raise ValueError("Template must be a tuple of strings")
+        
+        # Check that at least one repeatable part (odd indices) is non-empty
+        odd_parts_len = sum(len(tpl[i]) for i in range(1, len(tpl), 2))
+        if odd_parts_len == 0:
+             raise ValueError("Template must have at least one non-empty repeatable part")
+
+        return tuple(tpl)
     except (ValueError, SyntaxError) as e:
         raise ValueError(f"Invalid template format: {e}")
 

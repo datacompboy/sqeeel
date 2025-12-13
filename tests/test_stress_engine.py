@@ -84,8 +84,8 @@ class TestStressEngine(unittest.TestCase):
         effects = [i['effect'][0] for i in intervals]
         self.assertIn("success", effects)
 
-    @patch('builtins.input', side_effect=['init', 'quit'])
-    def test_explore_mode_init(self, mock_input):
+    @patch('sqeeel.stress_engine.engine.prompt', side_effect=['init', 'quit'])
+    def test_explore_mode_init(self, mock_prompt):
         t1 = ("P1", "L1", "M1", "R1", "S1")
         executor = MockExecutor()
         # engine = StressEngine(executor, [t1], 100)

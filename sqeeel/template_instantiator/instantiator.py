@@ -7,12 +7,8 @@ class TemplateInstantiator:
     Converts a given template to a query for any given size nominator X.
     """
     def __init__(self, template):
-        self.prefix, self.left, self.middle, self.right, self.suffix = template
-        self._compiled_prefix = self._compile(self.prefix)
-        self._compiled_left = self._compile(self.left)
-        self._compiled_middle = self._compile(self.middle)
-        self._compiled_right = self._compile(self.right)
-        self._compiled_suffix = self._compile(self.suffix)
+        self.parts = template
+        self.compiled_parts = [self._compile(p) for p in self.parts]
 
     def _compile(self, part):
         """
@@ -36,19 +32,15 @@ class TemplateInstantiator:
 
     def instantiate(self, x):
         counter = [0]
+        result_parts = []
         
-        final_prefix = self._instantiate_part(self._compiled_prefix, counter)
+        for i, compiled_part in enumerate(self.compiled_parts):
+            if i % 2 == 0:
+                # Even index (1st, 3rd...) -> Append once
+                result_parts.append(self._instantiate_part(compiled_part, counter))
+            else:
+                # Odd index (2nd, 4th...) -> Repeat x times
+                for _ in range(x):
+                    result_parts.append(self._instantiate_part(compiled_part, counter))
         
-        left_parts = []
-        for _ in range(x):
-            left_parts.append(self._instantiate_part(self._compiled_left, counter))
-        
-        final_middle = self._instantiate_part(self._compiled_middle, counter)
-        
-        right_parts = []
-        for _ in range(x):
-            right_parts.append(self._instantiate_part(self._compiled_right, counter))
-
-        final_suffix = self._instantiate_part(self._compiled_suffix, counter)
-        
-        return final_prefix + "".join(left_parts) + final_middle + "".join(right_parts) + final_suffix
+        return "".join(result_parts)

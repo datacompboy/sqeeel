@@ -22,5 +22,20 @@ class TestTemplateInstantiator(unittest.TestCase):
         instantiator = TemplateInstantiator(template)
         self.assertEqual(instantiator.instantiate(2), "INSERT INTO t0 VALUES (1), (2), (3), (4), (5), (6);")
 
+    def test_arbitrary_tuple(self):
+        # 3-tuple: Fixed, Mult, Fixed
+        template = ('A', 'B', 'C')
+        instantiator = TemplateInstantiator(template)
+        # x=3
+        # 0: A (Fixed)
+        # 1: B (Mult x=3) -> BBB
+        # 2: C (Fixed)
+        self.assertEqual(instantiator.instantiate(3), "ABBBC")
+
+    def test_single_element(self):
+        template = ('A',)
+        instantiator = TemplateInstantiator(template)
+        self.assertEqual(instantiator.instantiate(100), "A")
+
 if __name__ == '__main__':
     unittest.main()

@@ -1,0 +1,32 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engines for Postgresql, MariaDB, CockroachDB, YugabyteDB.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+Let's improve interactive "explore" run method.
+
+First, we need to support Ctrl-C cancellation for any looping without exit form the interactive mode.
+That means, `x..y` range command or `init` or `gap` should catch and stop looping in a clean way,
+still recording whatever job is already done.
+
+Second, the interactive mode should not print QueryTemplate() but rater clean tuples, so it can be used for copy-paste later.
+
+Third, for the templates we should support not only 5-tuples, but arbitrary items tuples.
+Instantiation should be generalized by processing elements in a sequence, with odd elements append once and even multiplied given amount of times.
+
+>>>>>> Addendum
+
+Please check ctrl+c during combined new  handling logic. when i run `init ('a', 'b')`, it runs several stages, then I press Ctrl+C -- I expect the stats to list few entries at this point -- instead, I see empty list and empty / old template.
+
+>>>>>> Addendum
+
+There is now problem with interruption during database recovery.
+We want to be able to interrupt the loop, but not the recovery.
+Perhaps, it worth to make like other apps do -- "Interrupting the loop after the recovery. Press Ctrl+C again to interrupt program" -- so double-interrupt will interrupt whole program; but single will break the loop AFTER the recovery process finishes.
