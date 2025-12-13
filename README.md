@@ -206,7 +206,7 @@ Just a few cases with same effect but different crash sources:
   Effect: crash (stack overflow) \
   Reason: CWE-400 "Uncontrolled Resource Consumption" \
   Crash is at :  `github.com/cockroachdb/cockroach/pkg/sql/sem/tree.(*ParenExpr).Format`
-  Report: ...
+  Report: RS-6152
 - Template: `('SELECT LIMIT 0 BETWEEN ', '0 ^ ', '0 ', '', 'AND 0 OFFSET 0')` \
   Query: `SELECT LIMIT 0 BETWEEN 0 ^ 0 ^ 0 ^ ... 0 ^ 0 AND 0 OFFSET 0` \
   Effect: crash (stack overflow) \
@@ -226,7 +226,15 @@ Just a few cases with same effect but different crash sources:
   Crash is at : `github.com/cockroachdb/cockroach/pkg/sql/sem/tree.(*IfErrExpr).Walk` \
   Report: ...
 
-There are queries that "hung" as well.
+There are queries that "hung" as well; and there are also interesting hangs:
+
+- Template: `("WITH x AS (SELECT TRUE x) ", "SELECT x = ALL(", "TRUE,TRUE", ")", " FROM x")` \
+  Query: `WITH x AS (SELECT TRUE x) SELECT x = ALL(SELECT X = ALL(...(TRUE,TRUE))) FROM x` \
+  Effect: hang \
+  Reason: CWE-405 "CWE-405: Asymmetric Resource Consumption (Amplification)" \
+  The query execution time grows with quadratic/cubic time: 500 reps => 4.6s, 1000 => 35.5s, 2000 => 287.3s \
+  Report: ...
+
 
 ### to be continued
 
