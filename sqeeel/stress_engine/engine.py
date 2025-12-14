@@ -471,7 +471,7 @@ class StressEngine:
                 session.template = new_template
                 session.stats = {}
                 session.intervals = []
-                print(f"Template set to: {session.template}")
+                logging.warning(f"Template set to: {session.template}")
             
             if not cmd_part and new_template:
                 return False
