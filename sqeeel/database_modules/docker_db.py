@@ -147,6 +147,13 @@ class DockerExecutor(Executor[DockerExecResult]):
         except subprocess.CalledProcessError:
              return False
 
+    def _send_ns_signal(self, nspid: int, signal: str = "SIGINT"):
+        """
+        Sends SIGINT to the main process inside the container.
+        """
+        subprocess.run(["docker", "exec", self.container_name, "kill", "-"+signal, str(nspid)],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     def _client_cancel(self):
         """
         Sends SIGINT to the process inside the container.
@@ -165,8 +172,6 @@ class DockerExecutor(Executor[DockerExecResult]):
                 return
 
             # 3. Find siblings (children of shim) that match our client
-            client_proc_name = os.path.basename(self.client_command[0])
-            
             target_pid = None
             shim_proc = psutil.Process(shim_pid)
             for child in shim_proc.children(recursive=False):
@@ -175,7 +180,7 @@ class DockerExecutor(Executor[DockerExecResult]):
                 
                 try:
                     # Match command name. Note: this is a heuristic.
-                    if child.name() == client_proc_name:
+                    if child.cmdline() == self.client_command:
                          target_pid = child.pid
                          break
                 except psutil.NoSuchProcess:
@@ -184,8 +189,7 @@ class DockerExecutor(Executor[DockerExecResult]):
             if target_pid:
                 nspid = self._get_nspid(target_pid)
                 if nspid:
-                    subprocess.run(["docker", "exec", self.container_name, "kill", "-SIGINT", str(nspid)],
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    self._send_ns_signal(nspid, "SIGINT")
         except Exception:
             pass
 
@@ -224,10 +228,13 @@ class DockerExecutor(Executor[DockerExecResult]):
                 self.terminate_query_callback(proc)
             else:
                 self._client_cancel()
-            
-            # 2. Wait
-            time.sleep(2)
-            
+
+            # 2. Wait for cancel if possible
+            try:
+                stdout, stderr = proc.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                pass
+
             # 3. Check currently running query Id
             query_id = None
             try:
@@ -264,6 +271,7 @@ class DockerExecutor(Executor[DockerExecResult]):
             # Cleanup if still running (force kill if fallback/logic failed to kill it)
             if proc.poll() is None:
                  proc.kill()
+                 stdout, stderr = proc.communicate(timeout=2)
                  proc.wait()
 
             try:

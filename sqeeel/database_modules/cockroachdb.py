@@ -104,6 +104,13 @@ class CockroachExecutor(DockerExecutor):
                 return False
         return True
 
+    def _send_ns_signal(self, nspid: int, signal: str = "SIGINT"):
+        """
+        Sends SIGINT to the main process inside the container.
+        """
+        subprocess.run(["docker", "exec", self.container_name, "bash", "-c", "kill -"+signal+" "+str(nspid)],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     def run_query(self, query: str) -> DockerExecResult:
         # CockroachDB sql client needs a semicolon to execute the query
         if not query.strip().endswith(";"):
@@ -144,30 +151,9 @@ class CockroachModule(DatabaseModule):
         )
 
     def _is_query_alive(self, executor: DockerExecutor) -> Optional[str]:
-        # CockroachDB also has pg_stat_activity
         cmd = [
             "./cockroach", "sql", "--insecure", "--format=csv", "-e",
-            "SELECT query_id FROM crdb_internal.node_queries WHERE phase = 'executing'"
-        ]
-        # crdb_internal.node_queries might be better? Or [SHOW QUERIES]
-        # Let's try to stick to standard PG stuff if possible, but crdb is specific.
-        # pg_stat_activity is supported.
-        # SELECT pid FROM pg_stat_activity WHERE state='active' and pid != pg_backend_pid()
-        
-        # NOTE: In CRDB, pid/query_id might be different. 
-        # For now, let's try standard PG approach first as it's wire compatible.
-        
-        cmd = [
-            "./cockroach", "sql", "--insecure", "--format=csv", "-e",
-            "SELECT query_id FROM [SHOW QUERIES] WHERE phase='executing'"
-        ]
-        # Let's use what we know works for sure or closest approximation.
-        # https://www.cockroachlabs.com/docs/stable/query-behavior-troubleshooting#show-queries
-        
-        # Better: use pg_stat_activity compatibility layer.
-        cmd = [
-            "./cockroach", "sql", "--insecure", "--format=csv", "--database=system", "-e",
-            "SELECT query_id FROM crdb_internal.cluster_queries WHERE phase='executing'"
+            "SELECT query_id FROM [SHOW QUERIES] WHERE session_id != (SELECT session_id FROM [show session_id])"
         ]
         
         try:
