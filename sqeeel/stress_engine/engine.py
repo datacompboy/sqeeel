@@ -257,6 +257,12 @@ class StressEngine:
             return None
 
         result = self.db_module.run_query(query)
+        
+        if result.status in [ExecutionStatus.INTERRUPTED, ExecutionStatus.INTERRUPTED_HANG]:
+            if result.status == ExecutionStatus.INTERRUPTED_HANG:
+                self._recover_database()
+            raise KeyboardInterrupt
+
         stats[size] = result
         
         if result.status in [ExecutionStatus.HANG, ExecutionStatus.CRASH]:

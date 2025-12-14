@@ -30,3 +30,34 @@ Please check ctrl+c during combined new  handling logic. when i run `init ('a', 
 There is now problem with interruption during database recovery.
 We want to be able to interrupt the loop, but not the recovery.
 Perhaps, it worth to make like other apps do -- "Interrupting the loop after the recovery. Press Ctrl+C again to interrupt program" -- so double-interrupt will interrupt whole program; but single will break the loop AFTER the recovery process finishes.
+
+>>>>>> Addendum
+
+When Ctrl+C pressed during long query, we should try to cancel query same way as "timeout" is handled, but we do NOT record this execution to the table.
+
+>>>>>> Addendum
+
+The interruption logic seems not work at the right time.
+When I run query at some size that known to hang, it detects hang and recovers:
+
+```
+> 6000
+2025-12-13 23:38:25,637 -   Running query for size 6000 (query size: 46931 bytes)...
+2025-12-13 23:38:42,849 - Attempting database recovery...
+2025-12-13 23:39:18,310 - Database recovered successfully.
+2025-12-13 23:39:18,310 -   Finished in 10.0079s. Effect: ('hang', '')
+2025-12-13 23:39:18,310 -     Full run stats: DockerExecResult(status='hang', error_message=None, duration=10.007914508001704, exit_code=None, stdout='', stderr='')
+Result: ('hang', '')
+```
+
+When I run the same query and try cancel it with Ctrl+C, it lefts hang query running:
+
+```
+> 6000
+2025-12-13 23:40:05,135 -   Running query for size 6000 (query size: 46931 bytes)...
+^C
+Interrupted.
+```
+
+and query still running in background, without hung recovery
+

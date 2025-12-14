@@ -12,6 +12,8 @@ class ExecutionStatus:
     CLIENT_HANG = "client-hang"
     CRASH = "crash"
     ERROR = "error"
+    INTERRUPTED = "interrupted"
+    INTERRUPTED_HANG = "interrupted-hang"
 
 
 @dataclass(kw_only=True)

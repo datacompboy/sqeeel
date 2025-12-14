@@ -216,7 +216,8 @@ class DockerExecutor(Executor[DockerExecResult]):
             stdout, stderr = proc.communicate(input=input_text, timeout=self.timeout)
             exit_code = proc.returncode
             end_time = time.monotonic()
-        except subprocess.TimeoutExpired:
+        except (subprocess.TimeoutExpired, KeyboardInterrupt) as e:
+            is_interrupt = isinstance(e, KeyboardInterrupt)
             end_time = time.monotonic()
             # 1. Client cancel
             if self.terminate_query_callback:
@@ -274,6 +275,12 @@ class DockerExecutor(Executor[DockerExecResult]):
             
             if not self._is_container_running():
                 status = ExecutionStatus.CRASH
+
+            if is_interrupt:
+                if status in [ExecutionStatus.HANG, ExecutionStatus.CRASH]:
+                    status = ExecutionStatus.INTERRUPTED_HANG
+                else:
+                    status = ExecutionStatus.INTERRUPTED
 
         duration = end_time - start_time
 
