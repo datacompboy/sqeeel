@@ -33,6 +33,8 @@ class CockroachExecutor(DockerExecutor):
                     self.image_name, 
                     "start", "--insecure", f"--join={join_args}",
                     "--log={capture-stray-errors: {enable: false}}",  # Capture stack crashes to stderr
+                    "--max-sql-memory=1G",  # Reduce memory limit for testing
+                    "--max-go-memory=4G", # Reduce memory limit for testing
                 ]
                 cid = subprocess.check_output(cmd).decode("utf-8").strip()
                 self.container_ids.append(cid)
