@@ -234,7 +234,14 @@ There are queries that "hung" as well; and there are also interesting hangs:
   Reason: CWE-405 "CWE-405: Asymmetric Resource Consumption (Amplification)" \
   The query execution time grows with quadratic/cubic time: 500 reps => 4.6s, 1000 => 35.5s, 2000 => 287.3s \
   Report: ...
-
+- Template: `('WITH x AS (SHOW STATEMENTS) SELECT FROM x', ' x$,x', ' LIMIT 1')` \
+  Query: `WITH x AS (SHOW STATEMENTS) SELECT FROM x x0,x x1,x x2,...,x LIMIT 1` \
+  Effect: hang + oom \
+  Reason: CWE-405 "CWE-405: Asymmetric Resource Consumption (Amplification)" \
+  The query consumes lot of time in "preparing" state when it can't be cancelled, and at the same time
+  consumes lot of memory during both preparing and execute phases, despite returning zero columns and
+  limited to only single row. \
+  Report: ...
 
 ### to be continued
 
