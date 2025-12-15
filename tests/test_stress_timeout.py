@@ -85,7 +85,7 @@ class TestDockerExecutorTimeout(unittest.TestCase):
     def test_timeout_kill_fallback(self, mock_popen):
         # Setup mock process
         process_mock = MagicMock()
-        process_mock.communicate.side_effect = subprocess.TimeoutExpired(cmd="cmd", timeout=1)
+        process_mock.communicate.side_effect = [subprocess.TimeoutExpired(cmd="cmd", timeout=1), ("true", ""),  ("true", "")]
         process_mock.poll.return_value = None # Still running
         process_mock.returncode = None
         
@@ -159,7 +159,8 @@ class TestDockerExecutorTimeout(unittest.TestCase):
         # Case: Timeout, kill called, process still alive -> HANG
         # Note: If is_query_alive_callback is None, status becomes TIMEOUT, not HANG.
         process_mock = MagicMock()
-        process_mock.communicate.side_effect = subprocess.TimeoutExpired(cmd="cmd", timeout=1)
+        # Communicate is called several times; first raises TimeoutExpired, then returns normally
+        process_mock.communicate.side_effect = [subprocess.TimeoutExpired(cmd="cmd", timeout=1), ("true", ""), ("true", "")]
         process_mock.poll.return_value = None # Always alive
         
         inspect_mock = MagicMock()
