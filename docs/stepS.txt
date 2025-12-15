@@ -1,0 +1,67 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engines for Postgresql, MariaDB and CockroachDB, YugabyteDB and Firebolt.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+Now we add an ScyllaDB adapter. We should support running as 1-node and distributed, which means we should support 1-node and 3-node execution modes; restricting every container to only 2 cores.
+
+We only focus on CQL, which is derivative from Cassandra's CQL, which highly resembles the SQL.
+The grammar is uploaded to grammars/scylladb-Cql.g (100kb size).
+Especially avoid reading any other grammar files, as they are HUGE (500kb).
+
+Please propose and ask for explicit confirmation on the architecture of changes to the application and classes structure.
+
+>>>>>>>>
+
+Grammar: Do not rely on auto-detect. Make explicit lightweight ANTLR parser that is sufficient to read rules dependency graph that will produce similar output to the existing BISON parse reader.
+
+ScyllaDB Module: you need --cpus=2 AND --smp=2 for the scylla itself.
+
+The rest sounds good.
+
+>>>>>>>>
+
+No.Put antlr parser to the separate file. Also, you produced two versions of parse_antlr_grammar. 
+Make call to antlr or bison explicit by the caller, NOT magic detection based on file name.
+
+>>>>>>>
+
+Other database modules uses nodes count as argument, not "1-node" vs "3-node" mode. Please. follow similar approach.
+
+>>>>>>>
+
+You also need to create ANTLR parser tests suite.
+
+>>>>>>>
+
+Shouldn't the quantifiers produce rules that actually produce loop?
+Something like equivalent of
+    A? ::= A | /* empty */;
+    B* ::= B B* | /* empty */;
+    C+ ::= C C*;
+?
+
+>>>>>>>
+
+Update executor error handling: the error message is the last line of the stderr output,
+for example:
+
+```
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/opt/scylladb/python3/lib64/python3.13/site-packages/cassandra/cluster.py", line 2762, in execute
+    return self.execute_async(query, parameters, trace, custom_payload, timeout, execution_profile, paging_state, host, execute_as).result()
+  File "/opt/scylladb/python3/lib64/python3.13/site-packages/cassandra/cluster.py", line 5166, in result
+    raise self._final_exception
+cassandra.InvalidRequest: Error from server: code=2200 [Invalid query] message="No keyspace has been specified. USE a keyspace, or explicitly specify keyspace.tablename"
+```
+
+And the error should be 
+"cassandra.InvalidRequest: Error from server: code=2200 [Invalid query] message="No keyspace has been specified. USE a keyspace, or explicitly specify keyspace.tablename""

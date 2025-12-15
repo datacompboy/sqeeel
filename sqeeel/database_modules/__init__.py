@@ -8,6 +8,7 @@ from .mariadb import MariaDBModule
 from .cockroachdb import CockroachModule
 from .yugabytedb import YugabyteModule
 from .firebolt import FireboltModule
+from .scylladb import ScyllaDBModule
 
 _MODULES = {
     m.name: m for m in [
@@ -16,6 +17,7 @@ _MODULES = {
         CockroachModule(),
         YugabyteModule(),
         FireboltModule(),
+        ScyllaDBModule(),
     ]
 }
 

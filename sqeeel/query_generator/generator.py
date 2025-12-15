@@ -70,8 +70,10 @@ class QueryGenerator:
     def __init__(self, grammar_file: str, max_cycle_length: int = 5,
                  grammar_token_rewriter: Optional[Callable[[str], str]] = None,
                  removed_rules: Optional[List[str]] = None,
-                 template_token_rewriter: Optional[Callable[[str], str]] = None):
-        self.rules = parse_grammar(grammar_file, grammar_token_rewriter, removed_rules)
+                 template_token_rewriter: Optional[Callable[[str], str]] = None,
+                 parser_func: Optional[Callable] = None):
+        parser = parser_func if parser_func else parse_grammar
+        self.rules = parser(grammar_file, grammar_token_rewriter, removed_rules)
         self.graph = build_graph(self.rules)
         self.template_token_rewriter = template_token_rewriter
         self.shortest_expansions = self._get_shortest_terminal_expansions()
