@@ -154,6 +154,11 @@ class DockerExecutor(Executor[DockerExecResult]):
         subprocess.run(["docker", "exec", self.container_name, "kill", "-"+signal, str(nspid)],
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+    def _match_client_process(self, child: psutil.Process) -> Optional[int]:
+        if child.cmdline() == self.client_command:
+            return child.pid
+        return None
+
     def _client_cancel(self):
         """
         Sends SIGINT to the process inside the container.
@@ -180,8 +185,7 @@ class DockerExecutor(Executor[DockerExecResult]):
                 
                 try:
                     # Match command name. Note: this is a heuristic.
-                    if child.cmdline() == self.client_command:
-                         target_pid = child.pid
+                    if target_pid := self._match_client_process(child):
                          break
                 except psutil.NoSuchProcess:
                     continue

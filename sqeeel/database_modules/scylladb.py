@@ -1,7 +1,7 @@
 import subprocess
 import time
 import uuid
-import re
+import psutil
 from typing import List, Optional, Callable
 from .base import DatabaseModule, Executor, ExecutionStatus
 from .docker_db import DockerExecutor, DockerExecResult
@@ -80,6 +80,18 @@ class ScyllaExecutor(DockerExecutor):
         
         subprocess.run(["docker", "network", "rm", self.network_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+    def _send_ns_signal(self, nspid: int, signal: str = "SIGINT"):
+        """
+        Sends SIGINT to the main process inside the container.
+        """
+        subprocess.run(["docker", "exec", self.container_name, "bash", "-c", "kill -"+signal+" "+str(nspid)],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def _match_client_process(self, child: psutil.Process) -> Optional[int]:
+        if child.cmdline()[:2] == ["python", "-c"]:
+            return child.pid
+        return None
+
     def wait_for_ready(self):
         print("Waiting for database to be ready...")
         orig_client_command = self.client_command
@@ -90,7 +102,6 @@ class ScyllaExecutor(DockerExecutor):
                 try:
                     # Scylla might be up but CQL not ready
                     result = self.run_query("DESCRIBE CLUSTER")
-                    print("Checking readiness..." + str(result), end="\r")
                     if result.exit_code == 0:
                         break
                 except Exception:
