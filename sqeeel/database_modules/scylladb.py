@@ -92,6 +92,29 @@ class ScyllaExecutor(DockerExecutor):
             return child.pid
         return None
 
+    def recover(self):
+        print("Waiting for ScyllaDB to auto-recover...")
+        # Use simple client command without keyspace for check
+        orig_client_command = self.client_command
+        self.client_command = self._init_client_command
+        try:
+            start_time = time.time()
+            while time.time() - start_time < 30:
+                try:
+                    # Check if DB is responsive
+                    result = self.run_query("SELECT now() FROM system.local")
+                    if result.exit_code == 0:
+                        print("ScyllaDB auto-recovered.")
+                        return
+                except Exception:
+                    pass
+                time.sleep(1)
+        finally:
+            self.client_command = orig_client_command
+        
+        print("ScyllaDB did not auto-recover. Performing full restart.")
+        super().recover()
+
     def wait_for_ready(self):
         print("Waiting for database to be ready...")
         orig_client_command = self.client_command
@@ -148,6 +171,7 @@ class ScyllaDBModule(DatabaseModule):
             # client_command=client_command("'ks'"), # default in ScyllaExecutor
             env={},
             error_normalizer=self._normalize_error,
+            crash_detector=self._crash_detector,
             init_queries=[
                 "CREATE KEYSPACE IF NOT EXISTS ks WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}",
                 "CREATE TABLE IF NOT EXISTS ks.x(x int PRIMARY KEY)",
@@ -155,6 +179,9 @@ class ScyllaDBModule(DatabaseModule):
             test_query="SELECT now() FROM system.local",
             timeout=args.query_timeout,
         )
+
+    def _crash_detector(self, stdout: str, stderr: str) -> bool:
+        return "ConnectionShutdown" in stderr or "ConnectionShutdown" in stdout
 
     def _normalize_error(self, stdout: str, stderr: str) -> str:
         if stderr:

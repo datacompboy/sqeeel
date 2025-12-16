@@ -1,0 +1,35 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engines for Postgresql, MariaDB and CockroachDB, YugabyteDB, Firebolt, and ScyllaDB.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+We need to fix detection and recovery of the ScyllaDB in case of crash.
+
+Observed behaviour:
+
+in case of the node crash during the query, the client ends up with ConnectionShutdown error:
+
+```
+DockerExecResult(status='success', error_message="cassandra.cluster.NoHostAvailable: ('Unable to complete the operation against any hosts', {<Host: 172.19.0.2:9042 datacenter1>: ConnectionShutdown('Connection to 172.19.0.2:9042 was closed')})", duration=2.650478055991698, exit_code=1, stdout='', stderr='Traceback (most recent call last):\n  File "<string>", line 1, in <module>\n  File "/opt/scylladb/python3/lib64/python3.13/site-packages/cassandra/cluster.py", line 2762, in execute\n    return self.execute_async(query, parameters, trace, custom_payload, timeout, execution_profile, paging_state, host, execute_as).result()\n  File "/opt/scylladb/python3/lib64/python3.13/site-packages/cassandra/cluster.py", line 5166, in result\n    raise self._final_exception\ncassandra.cluster.NoHostAvailable: (\'Unable to complete the operation against any hosts\', {<Host: 172.19.0.2:9042 datacenter1>: ConnectionShutdown(\'Connection to 172.19.0.2:9042 was closed\')})\n')
+Result: ('error', "cassandra.cluster.NoHostAvailable: ('Unable to complete the operation against any hosts', {<Host: 172.19.0.2:9042 datacenter1>: ConnectionShutdown('Connection to 172.19.0.2:9042 was closed')})")
+```
+  that should be detection method for crash-due-to-query.
+
+
+Crashed node automatically restarts, which means normally it should not be required to do full docker restart.
+
+That means, in case of crash detection, first we should try to wait for it to auto-bounce.
+Which means for about a 30 seconds we should try to do health check like `wait_for_ready`.
+ConnectionRefusedError means database still not ready:
+```
+DockerExecResult(status='success', error_message='cassandra.cluster.NoHostAvailable: (\'Unable to connect to any servers\', {\'172.19.0.2:9042\': ConnectionRefusedError(111, "Tried connecting to [(\'172.19.0.2\', 9042)]. Last error: Connection refused")})', duration=0.2971122180169914, exit_code=1, stdout='', stderr='Traceback (most recent call last):\n  File "<string>", line 1, in <module>\n  File "/opt/scylladb/python3/lib64/python3.13/site-packages/cassandra/cluster.py", line 1796, in connect\n    self.control_connection.connect()\n  File "/opt/scylladb/python3/lib64/python3.13/site-packages/cassandra/cluster.py", line 3633, in connect\n    self._set_new_connection(self._reconnect_internal())\n  File "/opt/scylladb/python3/lib64/python3.13/site-packages/cassandra/cluster.py", line 3694, in _reconnect_internal\n    raise NoHostAvailable("Unable to connect to any servers", errors)\ncassandra.cluster.NoHostAvailable: (\'Unable to connect to any servers\', {\'172.19.0.2:9042\': ConnectionRefusedError(111, "Tried connecting to [(\'172.19.0.2\', 9042)]. Last error: Connection refused")})\n')
+```
+
+If database does not bounce back within 30 seconds, we should go to the full recovery, when while cluster brought down and then started back up.

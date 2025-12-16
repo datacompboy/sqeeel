@@ -243,6 +243,16 @@ There are queries that "hung" as well; and there are also interesting hangs:
   limited to only single row. \
   Report: ...
 
+### ScyllaDB
+
+- Template: `('SELECT ', 'f(', 'x', ')', ' FROM x')` \
+  Query: `SELECT f(f(f(f(...(x)))))) from x` \
+  Effect: crash (stack overflow) \
+  Reason: CWE-400 "Uncontrolled Resource Consumption" \
+  The crashing boundary exceptionally low, just 1515 repetitions. \
+  Report: ...
+
+
 ### to be continued
 
 ...

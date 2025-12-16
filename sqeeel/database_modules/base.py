@@ -57,6 +57,14 @@ class Executor(ABC, Generic[T]):
         """
         pass
 
+    def recover(self):
+        """
+        Recovers the database by restarting it.
+        """
+        self.stop()
+        self.start()
+        self.wait_for_ready()
+
     @abstractmethod
     def run_query(self, query: str) -> T:
         """

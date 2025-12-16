@@ -231,9 +231,7 @@ class StressEngine:
         logging.warning("Attempting database recovery...")
         with DelayedKeyboardInterrupt():
             try:
-                self.db_module.stop()
-                self.db_module.start()
-                self.db_module.wait_for_ready()
+                self.db_module.recover()
                 self._run_extra_queries()
                 logging.warning("Database recovered successfully.")
             except Exception:
