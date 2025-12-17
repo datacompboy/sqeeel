@@ -11,23 +11,74 @@ class TestQueryGeneratorTiDB(unittest.TestCase):
     def setUp(self):
         self.tidb_module = TiDBModule()
 
-    def test_load_token_map(self):
-        # Create a dummy grammar file
+    def test_load_token_map_sections(self):
+        # Test case with multiple %token sections and %type interleaved
         grammar_content = """
         %token <ident>
-            intType "INT"
-            varcharType "VARCHAR"
-            andand "&&"
+            token1 "T1"
+            token2 "T2"
+
+        %token <ident>
+            token3 "T3"
+
+        %type <statement>
+            Type1 "Description 1"
+
+        %token <ident>
+            token4 "T4"
+            
+        %left
+            token5 "T5"
         """
-        filename = 'tests/temp_tidb_grammar_tokens.y'
+        filename = 'tests/temp_tidb_grammar_sections.y'
         with open(filename, 'w') as f:
             f.write(grammar_content)
             
         try:
             self.tidb_module._load_token_map(filename)
-            self.assertEqual(self.tidb_module._token_map.get('intType'), 'INT')
-            self.assertEqual(self.tidb_module._token_map.get('varcharType'), 'VARCHAR')
-            self.assertEqual(self.tidb_module._token_map.get('andand'), '&&')
+            self.assertEqual(self.tidb_module._token_map.get('token1'), 'T1')
+            self.assertEqual(self.tidb_module._token_map.get('token2'), 'T2')
+            self.assertEqual(self.tidb_module._token_map.get('token3'), 'T3')
+            self.assertEqual(self.tidb_module._token_map.get('token4'), 'T4')
+            
+            # Type1 should not be in map
+            self.assertIsNone(self.tidb_module._token_map.get('Type1'))
+            
+            # token5 is under %left, should not be in map (assuming logic only parses %token)
+            self.assertIsNone(self.tidb_module._token_map.get('token5'))
+            
+        finally:
+            if os.path.exists(filename):
+                os.remove(filename)
+
+    def test_special_tokens_handling(self):
+        # Check that special tokens are removed from map and handled in template rewriter
+        grammar_content = """
+        %token <ident>
+            singleAtIdentifier "identifier with single leading at"
+            doubleAtIdentifier "identifier with double leading at"
+            stringLit "string literal"
+            intLit "int literal"
+        """
+        filename = 'tests/temp_tidb_grammar_special.y'
+        with open(filename, 'w') as f:
+            f.write(grammar_content)
+            
+        try:
+            self.tidb_module._load_token_map(filename)
+            
+            # Should NOT be in map
+            self.assertIsNone(self.tidb_module._token_map.get('singleAtIdentifier'))
+            self.assertIsNone(self.tidb_module._token_map.get('doubleAtIdentifier'))
+            self.assertIsNone(self.tidb_module._token_map.get('stringLit'))
+            self.assertIsNone(self.tidb_module._token_map.get('intLit'))
+            
+            # Should be handled by template rewriter
+            self.assertEqual(self.tidb_module._template_token_rewriter("singleAtIdentifier"), "@x")
+            self.assertEqual(self.tidb_module._template_token_rewriter("doubleAtIdentifier"), "@@x")
+            self.assertEqual(self.tidb_module._template_token_rewriter("stringLit"), '""')
+            self.assertEqual(self.tidb_module._template_token_rewriter("intLit"), "0")
+            
         finally:
             if os.path.exists(filename):
                 os.remove(filename)
@@ -50,7 +101,7 @@ class TestQueryGeneratorTiDB(unittest.TestCase):
     def test_template_token_rewriter(self):
         self.assertEqual(self.tidb_module._template_token_rewriter("identifier"), "x")
         self.assertEqual(self.tidb_module._template_token_rewriter("ident"), "x")
-        self.assertEqual(self.tidb_module._template_token_rewriter("stringLit"), "'x'")
+        self.assertEqual(self.tidb_module._template_token_rewriter("stringLit"), '""')
         self.assertEqual(self.tidb_module._template_token_rewriter("intType"), "INT")
 
     def test_integration_with_generator(self):
@@ -78,17 +129,6 @@ class TestQueryGeneratorTiDB(unittest.TestCase):
         try:
             generator = self.tidb_module.create_query_generator(filename, max_cycle_length=5)
             
-            # item -> select intType identifier -> SELECT INT x
-            
-            # Since identifier is removed in _get_removed_rules, it should NOT appear in grammar templates?
-            # Wait, removed_rules removes RULES. 'identifier' is a TOKEN here (or rule if defined).
-            # If 'identifier' is a token, removing it from rules does nothing if it's not a rule.
-            # But usually 'identifier' is a terminal token.
-            # In TiDB grammar it is a token.
-            
-            # However, if I remove a rule, the generator won't traverse it.
-            # If 'identifier' is just a token, it will be kept.
-            
             templates = generator.generate_templates('stmt')
             
             generated_strs = set()
@@ -96,14 +136,6 @@ class TestQueryGeneratorTiDB(unittest.TestCase):
                 s = f"{t.prefix}{t.left}{t.middle}{t.right}{t.suffix}".strip()
                 s = " ".join(s.split())
                 generated_strs.add(s)
-            
-            # We expect SELECT INT x
-            # Note: recursive allows empty, so stmt -> item -> SELECT INT x
-            
-            # Check for SELECT INT x
-            # intType -> INT (grammar rewriter via map)
-            # select -> SELECT (grammar rewriter via map)
-            # identifier -> x (template rewriter)
             
             found = any('SELECT INT x' in s for s in generated_strs)
             self.assertTrue(found, f"Expected 'SELECT INT x' in templates, got: {generated_strs}")

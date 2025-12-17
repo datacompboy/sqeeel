@@ -11,3 +11,48 @@ You've implemented:
  - some limited unit tests in tests/ directory.
 
 Let's add TiDB adapter. The grammars/tidb-parser.y contains the grammar (~400kb size).
+
+>>>>>>> Correct grammar loading
+
+Please check the logic of _load_token_map.
+The tokens in grammar are only defined after 
+
+```
+%token	<ident>
+
+	/*yy:token "%c"     */
+	identifier           "identifier"
+	asof                 "AS OF"
+	toTimestamp          "TO TIMESTAMP"
+...
+
+There are other sections, like 
+
+```
+%type	<statement>
+	AdminStmt                  "Check table statement or show ddl statement"
+	AlterDatabaseStmt          "Alter database statement"
+	AlterTableStmt             "Alter table statement"
+	AlterUserStmt              "Alter user statement"
+```
+
+These are NOT tokens and should not be read as tokens map.
+
+>>>>>>>
+
+Please expand the test to include the second section to validate logic, as your previous tests missing it.
+
+Also add test to handle two %token sections -- one after another, and two with %type in between.
+
+Additionally, please explicitly remove from the token map the following tokens:
+  singleAtIdentifier => and add replace rule `@x`
+  doubleAtIdentifier => and add replace rule `@@x`
+  hintComment => and add replace rule `/*+ hint */
+  stringLit
+  floatLit
+  decLit
+  intLit
+  hexLit 
+  bitLit
+
+the xxLit should be replaced with correspodning literals like "", 0.0, 0, 0x0 etc.

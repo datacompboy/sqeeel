@@ -108,20 +108,42 @@ class TiDBModule(DatabaseModule):
         self._token_map = {}
         try:
             with open(grammar_file, 'r') as f:
-                content = f.read()
+                lines = f.readlines()
             
-            # Match lines like: name "string"
-            # We assume they are indented token definitions
-            # Example:
-            # intType "INT"
-            regex = re.compile(r'^\s+(\w+)\s+"([^"]+)"', re.MULTILINE)
-            matches = regex.findall(content)
+            in_token_section = False
+            # Regex to match: name "value"
+            token_regex = re.compile(r'^(\w+)\s+"([^"]+)"')
             
-            for name, val in matches:
-                self._token_map[name] = val
+            for line in lines:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                    
+                if stripped.startswith("%token"):
+                    in_token_section = True
+                    continue
                 
+                if stripped.startswith("%") and not stripped.startswith("%token"):
+                    in_token_section = False
+                    continue
+                
+                if in_token_section:
+                    # Ignore comments
+                    if stripped.startswith("/*") or stripped.startswith("//"):
+                        continue
+
+                    m = token_regex.match(stripped)
+                    if m:
+                        name, val = m.groups()
+                        if name not in {
+                            "singleAtIdentifier", "doubleAtIdentifier", "hintComment",
+                            "stringLit", "floatLit", "decLit", "intLit", "hexLit", "bitLit"
+                        }:
+                            self._token_map[name] = val
+
         except Exception as e:
             print(f"Warning: Failed to load token map from {grammar_file}: {e}")
+        print(f"Loaded {len(self._token_map)} tokens for TiDB from grammar.")
 
     def _grammar_token_rewriter(self, token: str) -> str:
         if self._token_map and token in self._token_map:
@@ -135,6 +157,38 @@ class TiDBModule(DatabaseModule):
             "NE": "!=",
             "GE": ">=",
             "EQ": "=",
+            # btFuncTokenMap from /pkg/parser/misc.go
+            "builtinBitAnd": "BIT_AND",
+            "builtinBitOr": "BIT_OR",
+            "builtinBitXor": "BIT_XOR",
+            "builtinCast": "CAST",
+            "builtinCount": "COUNT",
+            "builtinApproxCountDistinct": "APPROX_COUNT_DISTINCT",
+            "builtinApproxPercentile": "APPROX_PERCENTILE",
+            "builtinCurDate": "CURDATE",
+            "builtinCurTime": "CURTIME",
+            "builtinDateAdd": "DATE_ADD",
+            "builtinDateSub": "DATE_SUB",
+            "builtinExtract": "EXTRACT",
+            "builtinGroupConcat": "GROUP_CONCAT",
+            "builtinMax": "MAX",
+            "builtinSubstring": "MID",
+            "builtinMin": "MIN",
+            "builtinNow": "NOW",
+            "builtinPosition": "POSITION",
+            #"builtinStddevPop": "STD",
+            #"builtinStddevPop": "STDDEV",
+            "builtinStddevPop": "STDDEV_POP",
+            "builtinStddevSamp": "STDDEV_SAMP",
+            "builtinSubstring": "SUBSTR",
+            #"builtinSubstring": "SUBSTRING",
+            "builtinSum": "SUM",
+            "builtinSysDate": "SYSDATE",
+            "builtinTranslate": "TRANSLATE",
+            "builtinTrim": "TRIM",
+            #"builtinVarPop": "VARIANCE",
+            "builtinVarPop": "VAR_POP",
+            "builtinVarSamp": "VAR_SAMP",                                                                               
         }
         if token in replacements:
             return replacements[token]
@@ -149,9 +203,16 @@ class TiDBModule(DatabaseModule):
         replacements = {
             "identifier": "x",
             "ident": "x",
-            "stringLit": "'x'",
+            "stringLit": '""',
             "intType": "INT", # Ensure types are mapped if used as tokens
-            # Add more as discovered
+            "singleAtIdentifier": "@x",
+            "doubleAtIdentifier": "@@x",
+            "hintComment": "/*+ hint */",
+            "floatLit": "0.0",
+            "decLit": "0",
+            "intLit": "0",
+            "hexLit": "0x0",
+            "bitLit": "b'0'",
         }
         
         # If the token is in our map (e.g. intType -> INT), use that mapping primarily?
