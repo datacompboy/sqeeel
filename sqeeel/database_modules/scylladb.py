@@ -19,7 +19,13 @@ class ScyllaExecutor(DockerExecutor):
             return ["bash", "-c", f"PYTHONPATH=$(find /opt/scylladb/ -name 'site-packages') python -c \"{client_script}\""]
         self._init_client_command = client_command("")
 
-        super().__init__(client_command=client_command("'ks'"), **kwargs)
+        self._in_check = False
+        self._detected_hang = None
+        super().__init__(
+            client_command=client_command("'ks'"),
+            is_query_alive_callback=self._is_query_alive,
+            **kwargs
+        )
 
         self.nodes_count = nodes_count
         self.network_name = f"sqeeel-net-{uuid.uuid4().hex[:8]}"
@@ -31,6 +37,7 @@ class ScyllaExecutor(DockerExecutor):
              self.node_names = [self.container_name]
 
     def start(self):
+        self._detected_hang = None
         # Create network
         subprocess.check_call(["docker", "network", "create", "-d", "bridge", self.network_name])
         
@@ -92,6 +99,60 @@ class ScyllaExecutor(DockerExecutor):
             return child.pid
         return None
 
+    def _run_health_check(self) -> Optional[str]:
+        # Check 1: system_traces (global availability)
+        res = self.run_query(self.test_query)
+        
+        if res.status == ExecutionStatus.TIMEOUT:
+            return "check-timeout"
+        elif res.status == ExecutionStatus.HANG:
+            return "check-hang"
+            
+        if res.exit_code != 0:
+            if "NoHostAvailable" in res.stderr and "OperationTimedOut" in res.stderr:
+                return "entry-stuck"
+            elif "ReadTimeout" in res.stderr:
+                return "cluster-stuck"
+            elif "ConnectionRefusedError" in res.stderr:
+                return "node-refused"
+        else:
+            # Check 2: Dead nodes
+            res_dead = self.run_query("SELECT up FROM system.cluster_status WHERE up = False ALLOW FILTERING BYPASS CACHE USING TIMEOUT 1s")
+            if res_dead.status == ExecutionStatus.TIMEOUT:
+                 return "check-dead-timeout"
+                 
+            # Expected stdout is "None\n" if no rows found.
+            if res_dead.exit_code == 0 and res_dead.stdout.strip() != "None":
+                return "node-dead"
+                
+        return None
+
+    def _is_query_alive(self, executor: Executor) -> Optional[str]:
+        if self._detected_hang:
+            return self._detected_hang
+
+        if self._in_check:
+            return None
+
+        self._in_check = True
+        orig_timeout = self.timeout
+        # We need a timeout longer than the connection/read timeouts of the driver (5s/12s)
+        # to ensure we capture the error instead of timing out in docker exec.
+        self.timeout = 20
+
+        try:
+            reason = self._run_health_check()
+            if reason:
+                self._detected_hang = reason
+                return reason
+        except Exception:
+            pass
+        finally:
+            self.timeout = orig_timeout
+            self._in_check = False
+
+        return None
+
     def recover(self):
         print("Waiting for ScyllaDB to auto-recover...")
         # Use simple client command without keyspace for check
@@ -102,8 +163,7 @@ class ScyllaExecutor(DockerExecutor):
             while time.time() - start_time < 30:
                 try:
                     # Check if DB is responsive
-                    result = self.run_query("SELECT now() FROM system.local")
-                    if result.exit_code == 0:
+                    if self._run_health_check() is None:
                         print("ScyllaDB auto-recovered.")
                         return
                 except Exception:
@@ -124,8 +184,7 @@ class ScyllaExecutor(DockerExecutor):
             while True:
                 try:
                     # Scylla might be up but CQL not ready
-                    result = self.run_query("DESCRIBE CLUSTER")
-                    if result.exit_code == 0:
+                    if self._run_health_check() is None:
                         break
                 except Exception:
                     pass
@@ -176,7 +235,8 @@ class ScyllaDBModule(DatabaseModule):
                 "CREATE KEYSPACE IF NOT EXISTS ks WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}",
                 "CREATE TABLE IF NOT EXISTS ks.x(x int PRIMARY KEY)",
             ],
-            test_query="SELECT now() FROM system.local",
+            # Use system_traces.sessions to check global cluster health, not just local node
+            test_query="SELECT * FROM system_traces.sessions BYPASS CACHE",
             timeout=args.query_timeout,
         )
 

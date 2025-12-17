@@ -1,0 +1,76 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engines for Postgresql, MariaDB and CockroachDB, YugabyteDB, Firebolt, and ScyllaDB.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+We need to fix detection and recovery of the ScyllaDB in case of query hang.
+Since scylladb doens't have traditional live query list / cancellation, it'll be a little more tricky.
+
+Observed behaviour:
+
+- Regardless of which node used as execution entry point, the query will be routed to one of the healthy nodes.
+
+- If entry node itself is running hanging query, attempt to run any query ends up with error:
+  ```
+  cassandra.cluster.NoHostAvailable: ('Unable to connect to any servers', {'172.20.0.4:9042': OperationTimedOut('errors=Timed out creating connection (5 seconds), last_host=None')})
+  ```
+
+  that already means that node is stuck. (Note, that error is different from Crash which while NoHostAvailable but it is ConnectionRefusedError:
+
+  ```
+  cassandra.cluster.NoHostAvailable: ('Unable to connect to any servers', {'172.19.0.2:9042': ConnectionRefusedError(111, "Tried connecting to [('172.19.0.2', 9042)]. Last error: Connection refused")})
+  ```
+
+  Make sure hang / crash detection is correctly different.
+
+- If entry node is healthy since query stuck on another node, we can use differentiate between healthy cluster and cluster with stuck node using query
+
+  ```
+    select * from system_traces.sessions
+  ```
+
+  when one of the nodes in cluster is stuck, the query fails with
+
+  ```
+  cassandra.ReadTimeout: Error from server: code=1200 [Coordinator node timed out waiting for replica nodes' responses] message="Operation timed out for system_traces.sessions - received only 0 responses from 1 CL=LOCAL_ONE." info={'consistency': 'LOCAL_ONE', 'required_responses': 1, 'received_responses': 0}
+  ```
+
+For the cluster recovery from hung node, we either could identify hung node and send "kill -9" to the corresponding scylla process, or just do normal restart sequence, which is easier.
+
+>>>>>>>>
+
+Just providing _is_query_alive is insufficient. The hung query should trigger cluster recovery restart, instead, the "client-hang" state is returned and hung query keeps running in background leaving cluster half-working.
+
+>>>>>>>>
+
+Please read @/sqeeel/database_modules/docker_db.py  for the logic of _execute_process function -- just setting different return values from _is_query_ailve is insufficient.
+
+>>>>>>>>
+
+Now, the query is detected as "hung" but it does not recover, because it consider that it is sufficient to wait for auto-recovery. Please change health-check call from checking now from system.local to `select * from system_traces.sessions` so it always checks health of the whole cluster.
+
+>>>>>>>>
+
+Shouldn't you just make the select from sessions default test_query and use self.test_query everywhere? Adding comment about this query being global cluster health check.
+
+>>>>>>>>
+
+Testing shown that `select from system_traces.sessions` hangs iff one of the nodes is stuck processing the query AND not yet marked as dead. Once health check detects the node is unreachable, query no longer hangs.
+
+That means, if select from sessions succeed, we should also check that there is no dead nodes by running
+
+SELECT up FROM system.cluster_status WHERE up = False ALLOW FILTERING
+
+and check the stdout, it should be "None":
+    `exit_code=0, stdout='None\n', stderr=''`
+
+If the stdout is not None but `stdout='Row(up=False)\n'`, that means one of the nodes is unreachable, thus hang.
+
+You need to do this check in two places: in _is_query_alive and in recover. Maybe it worth to generalize this two-queries health check into separate function?

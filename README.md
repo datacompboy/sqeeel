@@ -251,7 +251,14 @@ There are queries that "hung" as well; and there are also interesting hangs:
   Reason: CWE-400 "Uncontrolled Resource Consumption" \
   The crashing boundary exceptionally low, just 1515 repetitions. \
   Report: ...
-
+- Template: `('SELECT * FROM x WHERE x = 0 ', 'AND x = 0 ', '', '', '')` \
+  Query: `SELECT * FROM x WHERE x = 0 AND x = 0 AND x = 0 ...` \
+  Effect: hang \
+  Reason: CWE-405 "CWE-405: Asymmetric Resource Consumption (Amplification)" \
+  The node that got the query for the execution start consuming 100%+ CPU and does not respond nor allow
+  to run new queries. Multiple attempts to run query will get stuck multiple nodes. The time required to
+  complete the query and un-stuck grows quadratically (or even cubic). \
+  Report: ...
 
 ### to be continued
 
