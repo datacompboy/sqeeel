@@ -9,6 +9,7 @@ from .cockroachdb import CockroachModule
 from .yugabytedb import YugabyteModule
 from .firebolt import FireboltModule
 from .scylladb import ScyllaDBModule
+from .tidb import TiDBModule
 
 _MODULES = {
     m.name: m for m in [
@@ -18,6 +19,7 @@ _MODULES = {
         YugabyteModule(),
         FireboltModule(),
         ScyllaDBModule(),
+        TiDBModule(),
     ]
 }
 
