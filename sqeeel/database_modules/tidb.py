@@ -87,7 +87,10 @@ class TiDBModule(DatabaseModule):
         lines = stderr.splitlines(keepends=True)
         first_line = lines[0] if lines else ""
         
-        return re.sub(r"'[^']*'", "'...'", first_line)
+        first_line = re.sub(r"'[^']*'", "'...'", first_line)
+        first_line = re.sub(r'near "[^"]*["]?', 'near "..."', first_line)
+        first_line = re.sub(r'line \d+ column \d+', 'line X column X', first_line)
+        return first_line.strip()
 
     def create_query_generator(self, grammar_file: str, max_cycle_length: int):
         # Load token map from grammar file
