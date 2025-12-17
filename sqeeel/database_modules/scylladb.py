@@ -2,6 +2,7 @@ import subprocess
 import time
 import uuid
 import psutil
+import re
 from typing import List, Optional, Callable
 from .base import DatabaseModule, Executor, ExecutionStatus
 from .docker_db import DockerExecutor, DockerExecResult
@@ -244,11 +245,25 @@ class ScyllaDBModule(DatabaseModule):
         return "ConnectionShutdown" in stderr or "ConnectionShutdown" in stdout
 
     def _normalize_error(self, stdout: str, stderr: str) -> str:
+        error_msg = ""
         if stderr:
             lines = stderr.strip().splitlines()
             if lines:
-                return lines[-1]
-        return (stderr.strip() or stdout.strip())[:200]
+                error_msg = lines[-1]
+        
+        if not error_msg:
+             error_msg = (stderr.strip() or stdout.strip())[:200]
+
+        # Fold ScyllaDB specific error details
+        error_msg = re.sub(r"<Host: [^>]+>", "<Host: XXX>", error_msg)
+        error_msg = re.sub(r"(Value too large), \d+ > \d+", r"\1", error_msg)
+        error_msg = re.sub(r"frame size \d+; estimate \d+; allowed \d+", "frame size XXX; estimate XXX; allowed XXX", error_msg)
+        error_msg = re.sub(r"\d+ required", "XXX required", error_msg)
+        error_msg = re.sub(r"\d+ provided", "XXX provided", error_msg)
+        error_msg = re.sub(r"but got \d+: \(.*?\)", "but got X: (...)", error_msg)
+        error_msg = re.sub(r"line \d+:\d+ :", "line X:X :", error_msg)
+        
+        return error_msg
 
     def create_query_generator(self, grammar_file: str, max_cycle_length: int):
         return QueryGenerator(

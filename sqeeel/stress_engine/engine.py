@@ -228,12 +228,12 @@ class StressEngine:
         """
         Recovers the database by restarting it.
         """
-        logging.warning("Attempting database recovery...")
+        logging.info("Attempting database recovery...")
         with DelayedKeyboardInterrupt():
             try:
                 self.db_module.recover()
                 self._run_extra_queries()
-                logging.warning("Database recovered successfully.")
+                logging.info("Database recovered successfully.")
             except Exception:
                 logging.exception("Failed to recover database.")
                 raise RuntimeError("Database recovery failed.")

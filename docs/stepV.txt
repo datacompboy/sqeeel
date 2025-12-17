@@ -1,0 +1,48 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engines for Postgresql, MariaDB and CockroachDB, YugabyteDB, Firebolt, and ScyllaDB.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+We need to improve error messages folding for ScyllaDB.
+
+
+Example of the error:
+    'cassandra.cluster.NoHostAvailable: (\'Unable to complete the operation against any hosts\', {<Host: 172.20.0.2:9042 datacenter1>: <Error from server: code=0000 [Server error] message="request processing failed, error [std::runtime_error (Value too large, 8031329 > 65535)]">})'
+
+We should cut/replace part `<Host: 172.20.0.2:9042 datacenter1>` into just <Host: XXX> and `Value too large, 8031329 > 65535` should be folded into just `Value too large`, so the error will be:
+    'cassandra.cluster.NoHostAvailable: (\'Unable to complete the operation against any hosts\', {<Host: XXX>: <Error from server: code=0000 [Server error] message="request processing failed, error [std::runtime_error (Value too large)]">})'
+
+
+Another example of the error:
+    'cassandra.InvalidRequest: Error from server: code=2200 [Invalid query] message="request size too large (frame size 33554443; estimate 67116886; allowed 48444211)"'
+
+We should cut out numbers from part (frame size ...; estimate ...; allowed ...) to make it
+    'cassandra.InvalidRequest: Error from server: code=2200 [Invalid query] message="request size too large (frame size XXX; estimate XXX; allowed XXX)"'
+
+
+Another example:
+    'cassandra.InvalidRequest: Error from server: code=2200 [Invalid query] message="Invalid number of arguments in call to function system.token: 1 required but 47266 provided"'
+Also require numbers rewrite for "\d+ required" and "\d+ provided" to make it
+    'cassandra.InvalidRequest: Error from server: code=2200 [Invalid query] message="Invalid number of arguments in call to function system.token: XXX required but XXX provided"'
+
+
+Another example:
+    'cassandra.InvalidRequest: Error from server: code=2200 [Invalid query] message="Expected 1 elements in value tuple, but got 8: (0, 0, 0, 0, 0, 0, 0, 0)"'
+We should suppress "but got" part to make sure it got to:
+    'cassandra.InvalidRequest: Error from server: code=2200 [Invalid query] message="Expected 1 elements in value tuple, but got X: (...)"'
+
+
+Another example:
+    'cassandra.protocol.SyntaxException: <Error from server: code=2000 [Syntax error in CQL query] message="line 1:531 : Missing \'>\'">'
+We should suppress line/column numbers, to make it this:
+    'cassandra.protocol.SyntaxException: <Error from server: code=2000 [Syntax error in CQL query] message="line X:X : Missing \'>\'">'
+
+
+Make also "Attempting database recovery" and "Database recovered successfully" messages of INFO level, so they don't contaminate stats logs.
