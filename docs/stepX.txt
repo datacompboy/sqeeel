@@ -1,0 +1,52 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engines for Postgresql, MariaDB and CockroachDB, YugabyteDB, Firebolt, ScyllaDB, and TiDB.
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+Let's add SingleStore adapter. There is no separate grammar for it, as it wire & protocol compatible to MySQL (and because grammar is not public), so just subclass
+mysql/mariadb directly for the generation part.
+
+>>>>>>>>
+
+The initialization sequence does not work as expected, because "wait for ready" does not detect completion.
+
+Startup sequence errors goes via
+
+```
+Test query result: DockerExecResult(status='crash', error_message='singlestore-client: [Warning] Using a password on the command line interface can be insecure.\n', duration=0.1803059399826452, exit_code=1, stdout='', stderr="singlestore-client: [Warning] Using a password on the command line interface can be insecure.\nERROR 2003 (HY000): Can't connect to MySQL server on '127.0.0.1' (111)\n")
+```
+
+To
+
+```
+Test query result: DockerExecResult(status='success', error_message='singlestore-client: [Warning] Using a password on the command line interface can be insecure.\n', duration=0.14957075600977987, exit_code=1, stdout='', stderr="singlestore-client: [Warning] Using a password on the command line interface can be insecure.\nERROR 1045 (28000): Access denied for user 'root'@'localhost' (using password: YES)\n")
+```
+
+And once everything complete, it still fails
+
+```
+Test query result: DockerExecResult(status='success', error_message='singlestore-client: [Warning] Using a password on the command line interface can be insecure.\n', duration=0.1538018400024157, exit_code=1, stdout='', stderr="singlestore-client: [Warning] Using a password on the command line interface can be insecure.\nERROR 1049 (42000): Unknown database 'testdb'\n")
+```
+
+Sounds like you should tune running client to:
+  a) don't select "testdb" for check queries
+  b) pass the password via environment variables to suppress warnings
+
+>>>>>>>
+
+Good attempts but does not work. The docker_db / wait_for_ready calls self.run_query which uses client_command, which already has ["-D", "testdb"] argument, thus, does not work as expected.
+
+Think harder on how that conundrum could be solved.
+
+>>>>>>>
+
+Add error message normalization rule:
+    Effect: ('error', 'ERROR 1119 (HY000) at line 1: Thread stack overrun:  Used: 1287168 of a 1048576 stack.  Specify a bigger stack in the memsql.cnf file by setting the thread-stack engine variable.\n')
+reduce number to a "Used: X of a" (the configured stack number can be left as is)

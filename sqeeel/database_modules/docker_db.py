@@ -97,6 +97,7 @@ class DockerExecutor(Executor[DockerExecResult]):
         while True:
             try:
                 result = self.run_query(self.test_query)
+                # print(f"Test query result: {result}")
                 if result.exit_code == 0:
                     break
             except Exception:

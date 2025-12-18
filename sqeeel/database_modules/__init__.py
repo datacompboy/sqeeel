@@ -10,6 +10,7 @@ from .yugabytedb import YugabyteModule
 from .firebolt import FireboltModule
 from .scylladb import ScyllaDBModule
 from .tidb import TiDBModule
+from .singlestore import SingleStoreModule
 
 _MODULES = {
     m.name: m for m in [
@@ -20,6 +21,7 @@ _MODULES = {
         FireboltModule(),
         ScyllaDBModule(),
         TiDBModule(),
+        SingleStoreModule(),
     ]
 }
 
