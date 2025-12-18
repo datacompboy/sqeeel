@@ -260,6 +260,34 @@ There are queries that "hung" as well; and there are also interesting hangs:
   complete the query and un-stuck grows quadratically (or even cubic). \
   Report: ...
 
-### to be continued
+### TiDB
 
-...
+Generated templates lack "FROM" for the case "SELECT * " when next word is next FROM. For simplicity,
+I added "FROM x" manually to these cases.
+
+Manual tests:
+
+- Template: `("SELECT ", "+2")` \
+  Query: `SELECT +2+2+2+2+2+2...` \
+  Effect: crash (stack overflow) \
+  Reason: CWE-400 "Uncontrolled Resource Consumption" \
+  Simple nested expression that leads to golang stack overflow. \
+  Reported over email.
+- Template: `("SELECT ", "hex(", "2", ")")` \
+  Query: `SELECT hex(hex(hex(...(2))))` \
+  Effect: OOM \
+  Reason: CWE-405 "Asymmetric Resource Consumption (Amplification)" \
+  40 repetitions is enough to consume up to 1Tb of RAM. The query can't be cancelled, so the server is
+  doomed once query is sent. \
+  Reported over email.
+- Template: `("SELECT user.user FROM mysql.user WHERE ", "user='roott' OR ", "user='root'")` \
+  Query: `SELECT user.user FROM mysql.user WHERE user='roott' OR user='roott' OR ...` \
+  Effect: hang \
+  Reason: CWE-400 "Uncontrolled Resource Consumption" + CWE-405 Asymmetric Resource Consumption (Amplification)" \
+  The query can't be cancelled, killing client doesn't cancel the query, query eating 200% cpu for each
+  query instance, time until finish grows quadratically from the number of filters. The problem can
+  be triggered by passing long list of filters to the application. The longer string matching before
+  negative check for each OR, the longer query hang. \
+  Reported over email.
+
+Automated search also found multiple variations of hung / crash / oom queries.
