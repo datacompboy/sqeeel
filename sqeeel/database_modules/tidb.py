@@ -54,6 +54,13 @@ class TiDBModule(DatabaseModule):
             crash_detector=self._crash_detector
         )
 
+    def _send_ns_signal(self, nspid: int, signal: str = "SIGINT"):
+        """
+        Sends SIGINT to the main process inside the container.
+        """
+        subprocess.run(["docker", "exec", self.container_name, "bash", "-c", "kill -"+signal+" "+str(nspid)],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     def _is_query_alive(self, executor: DockerExecutor) -> Optional[str]:
         # Check for active queries in information_schema.processlist
         cmd = [

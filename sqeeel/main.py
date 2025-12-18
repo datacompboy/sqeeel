@@ -54,6 +54,8 @@ def setup_logging(args):
         level=root_level,
         handlers=handlers
     )
+    logging.warning(f"Run application with arguments: {args}")
+
 
 
 def get_templates(args, db_module) -> List:
