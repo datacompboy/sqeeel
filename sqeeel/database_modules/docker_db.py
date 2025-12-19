@@ -255,7 +255,10 @@ class DockerExecutor(Executor[DockerExecResult]):
                     if self.server_cancel_callback:
                         self.server_cancel_callback(self, query_id)
                     
-                    # 5. Sleep for 2 seconds
+                    # 5. Sleep for 2 seconds (or more if server_cancel_callback handles it)
+                    # We sleep here only if server_cancel_callback didn't already wait
+                    # But since we can't easily know, we'll keep a small buffer, 
+                    # relying on server_cancel_callback to do the heavy waiting if needed.
                     time.sleep(2)
                     
                     # 6. Check currently running query Id again

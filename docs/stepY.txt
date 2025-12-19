@@ -1,0 +1,17 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engines for Postgresql, MariaDB and CockroachDB, YugabyteDB, Firebolt, ScyllaDB, TiDB, and SingleStore (memsql).
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+The SingleStore/memsql "KILL QUERY" may take some time to take effect; the DockerExecutor only waits for 2 seconds.
+Let's make extra wait for up to ~10 seconds in killing query to correctly handle that without need for full recover.
+
+Also, in case of executor/compiler crash, it often does not require full docker restart as it self-heals.
+Let's add self-healing wait before going to full recover, similar to what was done for ScyllaDB.
