@@ -15,3 +15,25 @@ Let's make extra wait for up to ~10 seconds in killing query to correctly handle
 
 Also, in case of executor/compiler crash, it often does not require full docker restart as it self-heals.
 Let's add self-healing wait before going to full recover, similar to what was done for ScyllaDB.
+
+>>>>>>>
+
+Please check the recovery logic. Right now after the crash / hang / etc, next query sent often ends up with
+
+        DockerExecResult(status='crash', error_message="ERROR 2003 (HY000): Can'...'127.0.0.1' (111)\n", duration=0.2149240630096756, exit_code=1, stdout='', stderr="ERROR 2003 (HY000): Can't connect to MySQL server on '127.0.0.1' (111)\n")
+
+which means, it didn't wait correctly until self-heal complete.
+
+>>>>>>>
+
+Actually, it looks like there are several issues:
+
+1. When server crashes, but since the core dump is huge, the dumping takes time to trigger timeout. that causes detection of timeout or client-hang instead of crash; which misses recovery method -- causing several followup queries to get `stderr="ERROR 2269 (HY000): The database 'testdb' is not available for queries, as it is waiting for the Master Aggregator to bring it online.  Run SHOW DATABASES EXTENDED and visit https://docs.memsql.com/docs/database#database-states for more information.\n"` while database is in recovery mode.
+
+2. When timeout/client-hang causes delayed server-side recovery response;  the instant health check succeeds, but in a few seconds the watchdog acts and database goes to recovery mode, leading to `"ERROR 2003 (HY000): Can't connect to MySQL server on '127.0.0.1' (111)\n"` errors happening for the followup queries.
+
+That said, the simple health check + wait + health check is not sufficient to detect the correct recovery.
+
+Please think about the whole execution flow and propose how exactly you could make query end detection robust, and validate the health after any non-"success" query -- not only after "crash" and "hung" for the singlestore, as this seems different from other databases here.
+
+Please use the self.test_query instead of literal "SELECT 1" in health checks.

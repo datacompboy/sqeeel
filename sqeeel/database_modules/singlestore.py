@@ -1,8 +1,9 @@
 import re
 import time
+import subprocess
 from typing import Optional, List
-from .base import Executor
-from .docker_db import DockerExecutor
+from .base import Executor, ExecutionStatus
+from .docker_db import DockerExecutor, DockerExecResult
 from .mariadb import MariaDBModule
 
 class SingleStoreExecutor(DockerExecutor):
@@ -21,12 +22,17 @@ class SingleStoreExecutor(DockerExecutor):
             "SELECT id FROM information_schema.processlist WHERE command != 'Sleep' AND id != CONNECTION_ID()"
         ]
         
+        # We do NOT want to swallow connection errors here.
+        # If exec_cmd raises (e.g. connection refused), let it bubble up
+        # so DockerExecutor marks it as CRASH.
         try:
             stdout = self.exec_cmd(cmd)
             result = stdout.strip()
             return result if result else None
-        except Exception:
-            return None
+        except subprocess.CalledProcessError as e:
+            # If the error is not about connection, maybe it's fine?
+            # But failure to check processlist usually means big trouble.
+            raise e
 
     def _server_cancel(self, executor: DockerExecutor, query_id: str):
         cmd = [
@@ -37,27 +43,63 @@ class SingleStoreExecutor(DockerExecutor):
             self.exec_cmd(cmd)
             # Wait a bit to let the query cancel take effect
             for k in range(10):
-                if not self._is_query_alive(self):
+                # If checking query alive fails (crash), we stop waiting
+                try:
+                    if not self._is_query_alive(self):
+                        return
+                except Exception:
                     return
                 time.sleep(1)
         except Exception:
             pass
 
     def _crash_detector(self, stdout: str, stderr: str) -> bool:
-        return "Lost connection to MySQL server" in stderr or "Can't connect to MySQL server" in stderr or "ERROR 2013" in stderr
+        err = stdout + stderr
+        if "Lost connection to MySQL server" in err or "Can't connect to MySQL server" in err or "ERROR 2013" in err:
+            return True
+        # "waiting for the Master Aggregator" -> code 2269
+        if "ERROR 2269" in err or "waiting for the Master Aggregator" in err:
+            return True
+        return False
+
+    def run_query(self, query: str) -> DockerExecResult:
+        res = super().run_query(query)
+        
+        # If query failed (or timed out), ensure the server is actually healthy.
+        # User reported cases where status is TIMEOUT but server is crashing.
+        if res.status != ExecutionStatus.SUCCESS:
+            if not self._check_health():
+                res.status = ExecutionStatus.CRASH
+                res.error_message = (res.error_message or "") + " [Server unhealthy]"
+        
+        return res
+
+    def _check_health(self) -> bool:
+        try:
+            # Run a simple check. If this fails (raises or non-zero exit), assume unhealthy.
+            # We use super().run_query to avoid recursion (though run_query doesn't call itself)
+            # but mainly to get a DockerExecResult
+            check_res = super().run_query(self.test_query)
+            if check_res.exit_code != 0:
+                return False
+            # Also check for critical errors in the output even if exit code is 0 (unlikely but safe)
+            if self._crash_detector(check_res.stdout, check_res.stderr):
+                return False
+            return True
+        except Exception:
+            return False
 
     def recover(self):
         print("Waiting for SingleStore to auto-recover...")
         # Try for 30 seconds
         start_time = time.time()
         while time.time() - start_time < 30:
-            try:
-                res = self.run_query("SELECT 1")
-                if res.exit_code == 0:
+            if self._check_health():
+                # Server seems up. Wait a bit to ensure stability (watchdog delay).
+                time.sleep(5)
+                if self._check_health():
                     print("SingleStore auto-recovered.")
                     return
-            except Exception:
-                pass
             time.sleep(1)
         
         print("SingleStore did not auto-recover. Performing full restart.")

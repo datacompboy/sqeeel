@@ -291,3 +291,21 @@ Manual tests:
   Reported over email.
 
 Automated search also found multiple variations of hung / crash / oom queries.
+
+### SingleStore
+
+- Template: `('SELECT * FROM ', '', 'x x$ ', 'JOIN x x$ ON x ', '')` \
+  Query: `SELECT * FROM x x0 JOIN x x1 ON x JOIN x x2 ON x ...` \
+  Effect: crash \
+  Reason: ? \
+  Actually interesting case, as it switch between different effects: \
+
+  ```
+  1 - 3068: ('error', "ERROR 1052 (23000) at line 1: Column '...' in on clause is ambiguous\n")
+  3069 - 5245: ('error', 'ERROR 1119 (HY000) at line 1: Thread stack overrun:  Used: X of a 1048576 stack.  Specify a bigger stack in the memsql.cnf file by setting the thread-stack engine variable.\n')
+  5246 - 5500: ('crash', '')
+  5501 - 12465: ('error', 'ERROR 1119 (HY000) at line 1: Thread stack overrun:  Used: X of a 1048576 stack.  Specify a bigger stack in the memsql.cnf file by setting the thread-stack engine variable.\n')
+  12466 - 820767: ('crash', '')
+  ```
+
+  which suggests improperly placed checks, so the deep process sometimes hit the limit, sometimes triggers SIGSEGV.
