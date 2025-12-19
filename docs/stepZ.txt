@@ -1,0 +1,21 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engines for Postgresql, MariaDB and CockroachDB, YugabyteDB, Firebolt, ScyllaDB, TiDB, and SingleStore (memsql).
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+The project has "generate-cmd" run mode that should print short and quick commandline repro generator.
+The generator instead of being part of template_instantiator was wrongly placed to query_generator.
+Additionally, the produced generator incorrectly only produces part of the query without dynamic bit, i.e.
+it does not support sequence generation, for the "x x$" instead of producing `x x0`, `x x1` etc it produces literal `x x$`.
+Let's forget about performance and just make short efficient generator, that produces correct repro, just be short.
+
+>>>>>>>
+
+the problem is the generated script is multi-line which is not convenient for copy-paste. Could you make the script more compact and 1-liner?

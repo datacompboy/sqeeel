@@ -7,9 +7,9 @@ import time
 from typing import List, Tuple
 
 from sqeeel.stress_engine.engine import StressEngine
-from sqeeel.query_generator import QueryGenerator, parse_template_string, generate_cmd
+from sqeeel.query_generator import QueryGenerator
+from sqeeel.template_instantiator import TemplateInstantiator, parse_template_string, generate_cmd
 from sqeeel.database_modules import get_db_module, get_all_db_modules
-from sqeeel.template_instantiator.instantiator import TemplateInstantiator
 
 
 def setup_logging(args):

@@ -7,7 +7,7 @@ import subprocess
 from ..template_instantiator.instantiator import TemplateInstantiator
 from ..database_modules.base import ExecutionStatus
 from ..stress_engine.intervals import add_interval
-from ..query_generator import parse_template_string
+from ..template_instantiator import parse_template_string
 
 class ExploreSession:
     def __init__(self, template=None):
