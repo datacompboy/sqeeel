@@ -5,6 +5,7 @@ from .base import ExecResult, Executor, DatabaseModule
 from .docker_db import DockerExecutor
 from .postgresql import PostgresModule
 from .mariadb import MariaDBModule
+from .mysql import MySQLModule
 from .cockroachdb import CockroachModule
 from .yugabytedb import YugabyteModule
 from .firebolt import FireboltModule
@@ -16,6 +17,7 @@ _MODULES = {
     m.name: m for m in [
         PostgresModule(),
         MariaDBModule(),
+        MySQLModule(),
         CockroachModule(),
         YugabyteModule(),
         FireboltModule(),

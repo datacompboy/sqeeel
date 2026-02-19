@@ -1,0 +1,15 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engines for Postgresql, MariaDB and CockroachDB, YugabyteDB, Firebolt, ScyllaDB, TiDB, and SingleStore (memsql).
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+
+Please create MySQL runner, relying on mysql:latest docker image; use grammar from grammars/mysql-sql_yacc.yy file (do not read the file, it's too big).
+For the initial version copy the MariaDB class, but I assume we'll have to make down the road changes to grammar and executor parts, so subclass does not sound good strategy.
