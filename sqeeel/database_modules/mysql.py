@@ -61,7 +61,9 @@ class MySQLModule(DatabaseModule):
             return stdout if stdout else ""
         lines = stderr.splitlines(keepends=True)
         first_line = lines[0] if lines else ""
-        
+
+        first_line = re.sub(r"\d+ bytes ", "X bytes ", first_line)
+
         # Replace text inside of the single-quotes with three dots
         return re.sub(r"'[^']*'", "'...'", first_line)
 
@@ -147,7 +149,7 @@ class MySQLModule(DatabaseModule):
             "USER": "SESSION_USER",
             "STD": "STDDEV",
             #"STD": "STDDEV_POP",
-            "SUBSTRING": "SUBSTR",
+            #"SUBSTRING": "SUBSTR",
             #"USER": "SYSTEM_USER",
             "VARIANCE": "VAR_POP",
             "DERIVED_MERGE": "MERGE",
@@ -166,7 +168,7 @@ class MySQLModule(DatabaseModule):
 
     def _get_removed_rules(self) -> List[str]:
         # Rules to exclude from generation
-        return ["ident", "table_ident", "opt_table_alias_clause"]
+        return ["ident", "table_ident", "opt_table_alias", "into_destination", "opt_from_clause"]
 
     def _template_token_rewriter(self, token: str) -> str:
         replacements = {
@@ -184,7 +186,10 @@ class MySQLModule(DatabaseModule):
             "IDENT": "x",
             "IDENT_QUOTED": "`x`",
             # shorteners
+            "into_destination": "@x",
+            "ident": "x",
             "ident_or_text": "x",
             "opt_table_alias": "x$",
+            "opt_from_clause": "FROM x",
         }
         return replacements.get(token, token)
