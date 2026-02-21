@@ -1,0 +1,21 @@
+This is a database stress-testing application on python.
+
+It supposed to be adaptable to various different database engines, currently have working engines for Postgresql, MariaDB and CockroachDB, YugabyteDB, Firebolt, ScyllaDB, TiDB, and SingleStore (memsql).
+
+You've implemented:
+ - sqeeel/database_modules, providing running the database engine and running queries against it using docker-based images;
+ - sqeeel/template_instantiator module, that allows to generate queries that are scalable in size;
+ - sqeeel/query_generator module that generates query templates based on a bison-style grammar parser tuned to the database calling database module hooks;
+ - sqeeel/stress_engine, that applies each given template running stress loop over whole range of sizes;
+ - runner application with CLI interface;
+ - some limited unit tests in tests/ directory.
+
+
+In some cases, f.e. for MySQL grammar, it is feasible to not only have a hook to remove some grammar rules, but to
+actually apply arbitrary rules rewriting.
+
+Please add to the grammar generator ability to run after rules removal also optional function that will directly mutate
+the current rules set.
+
+Add usage of these hook in MySQL handler, by replacing rules for `opt_from_clause` to single alternative [['from_clause']],
+and `from_tables` to single [['table_reference_list']].

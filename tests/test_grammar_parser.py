@@ -48,5 +48,15 @@ class TestGrammarParser(unittest.TestCase):
                     self.assertFalse(token.startswith('/*'))
                     self.assertFalse(token.startswith('//'))
 
+    def test_parse_grammar_with_mutator(self):
+        def mutator(rules):
+            rules['new_rule'] = [['foo']]
+            rules['expr'] = [['modified']]
+
+        rules = parse_grammar('tests/sample.y', rules_mutator=mutator)
+        self.assertIn('new_rule', rules)
+        self.assertEqual(rules['new_rule'], [['foo']])
+        self.assertEqual(rules['expr'], [['modified']])
+
 if __name__ == '__main__':
     unittest.main()

@@ -98,7 +98,8 @@ def tokenize(text: str) -> Generator[Tuple[str, str], None, None]:
 def parse_grammar(
     file_path: str,
     token_rewriter: Optional[Callable[[str], str]] = None,
-    removed_rules: Optional[List[str]] = None
+    removed_rules: Optional[List[str]] = None,
+    rules_mutator: Optional[Callable[[Dict[str, List[List[str]]]], None]] = None
 ) -> Dict[str, List[List[str]]]:
     """
     Parses a Bison-compatible grammar file and returns a map of rules.
@@ -199,5 +200,8 @@ def parse_grammar(
         for rule in removed_rules:
             if rule in rules:
                 del rules[rule]
+    
+    if rules_mutator:
+        rules_mutator(rules)
         
     return rules

@@ -12,9 +12,10 @@ class QueryGenerator:
                  grammar_token_rewriter: Optional[Callable[[str], str]] = None,
                  removed_rules: Optional[List[str]] = None,
                  template_token_rewriter: Optional[Callable[[str], str]] = None,
-                 parser_func: Optional[Callable] = None):
+                 parser_func: Optional[Callable] = None,
+                 rules_mutator: Optional[Callable[[Dict[str, List[List[str]]]], None]] = None):
         parser = parser_func if parser_func else parse_grammar
-        self.rules = parser(grammar_file, grammar_token_rewriter, removed_rules)
+        self.rules = parser(grammar_file, grammar_token_rewriter, removed_rules, rules_mutator=rules_mutator)
         self.graph = build_graph(self.rules)
         self.template_token_rewriter = template_token_rewriter
         self.shortest_expansions = self._get_shortest_terminal_expansions()

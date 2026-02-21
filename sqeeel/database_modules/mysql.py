@@ -1,5 +1,5 @@
 import re
-from typing import Optional, List
+from typing import Optional, List, Dict
 from .base import DatabaseModule, Executor
 from .docker_db import DockerExecutor
 from sqeeel.query_generator.generator import QueryGenerator
@@ -73,8 +73,13 @@ class MySQLModule(DatabaseModule):
             max_cycle_length=max_cycle_length,
             grammar_token_rewriter=self._grammar_token_rewriter,
             removed_rules=self._get_removed_rules(),
-            template_token_rewriter=self._template_token_rewriter
+            template_token_rewriter=self._template_token_rewriter,
+            rules_mutator=self._rules_mutator
         )
+
+    def _rules_mutator(self, rules: Dict[str, List[List[str]]]):
+        rules["opt_from_clause"] = [["from_clause"]]
+        rules["from_tables"] = [["table_reference_list"]]
 
     def _grammar_token_rewriter(self, token: str) -> str:
         replacements = {
@@ -168,7 +173,7 @@ class MySQLModule(DatabaseModule):
 
     def _get_removed_rules(self) -> List[str]:
         # Rules to exclude from generation
-        return ["ident", "table_ident", "opt_table_alias", "into_destination", "opt_from_clause"]
+        return ["ident", "table_ident", "opt_table_alias", "into_destination"]
 
     def _template_token_rewriter(self, token: str) -> str:
         replacements = {
@@ -187,9 +192,9 @@ class MySQLModule(DatabaseModule):
             "IDENT_QUOTED": "`x`",
             # shorteners
             "into_destination": "@x",
+            "table_ident": "x",
             "ident": "x",
             "ident_or_text": "x",
             "opt_table_alias": "x$",
-            "opt_from_clause": "FROM x",
         }
         return replacements.get(token, token)
