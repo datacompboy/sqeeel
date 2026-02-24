@@ -206,7 +206,7 @@ Just a few cases with same effect but different crash sources:
   Effect: crash (stack overflow) \
   Reason: CWE-400 "Uncontrolled Resource Consumption" \
   Crash is at :  `github.com/cockroachdb/cockroach/pkg/sql/sem/tree.(*ParenExpr).Format`
-  Report: RS-6152
+  Report: RS-6152, https://github.com/cockroachdb/cockroach/issues/159599
 - Template: `('SELECT LIMIT 0 BETWEEN ', '0 ^ ', '0 ', '', 'AND 0 OFFSET 0')` \
   Query: `SELECT LIMIT 0 BETWEEN 0 ^ 0 ^ 0 ^ ... 0 ^ 0 AND 0 OFFSET 0` \
   Effect: crash (stack overflow) \
@@ -309,3 +309,16 @@ Automated search also found multiple variations of hung / crash / oom queries.
   ```
 
   which suggests improperly placed checks, so the deep process sometimes hit the limit, sometimes triggers SIGSEGV.
+
+### MySQL
+
+Tracking #:    S2329421
+Description:   MySQL Server DoS query
+
+Tracking #:    S2329413/CVE-2026-21968:
+Description:   MySQL server: CPU-eating DoS query
+
+Tracking #:    S2389842
+Description:   CRASH INSIDE OF THE QUERY PARSER/PLANNER/RESOLVER
+
+NOTE: Fill in
