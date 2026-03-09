@@ -322,3 +322,16 @@ Tracking #:    S2389842
 Description:   CRASH INSIDE OF THE QUERY PARSER/PLANNER/RESOLVER
 
 NOTE: Fill in
+
+### Firebolt
+
+- Template: `("CREATE TABLE x(x int DESCRIPTION '","x","')")`
+  Query: `CREATE TABLE x(x int DESCRIPTION 'xxxxxxxxxxxxxx...')`
+  Effect: query successful, but no more queries possible against the server \
+  Reason: bug in internal retry mechanism \
+  Report: https://github.com/firebolt-db/firebolt-core/issues/59 \
+
+  Interesting failure mode, when correct query causes problems for the followup queries.
+  While failure pattern is clear, haven't had time to generalize handling this kind of patterns,
+  thus this one was confirmed and validated manually. Worth deeper exploration.
+
