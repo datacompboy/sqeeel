@@ -250,7 +250,7 @@ There are queries that "hung" as well; and there are also interesting hangs:
   Effect: crash (stack overflow) \
   Reason: CWE-400 "Uncontrolled Resource Consumption" \
   The crashing boundary exceptionally low, just 1515 repetitions. \
-  Report: ...
+  Report: CVE-2026-31948 https://github.com/scylladb/scylladb/security/advisories/GHSA-m4h7-g37h-mgxf
 - Template: `('SELECT * FROM x WHERE x = 0 ', 'AND x = 0 ', '', '', '')` \
   Query: `SELECT * FROM x WHERE x = 0 AND x = 0 AND x = 0 ...` \
   Effect: hang \
@@ -258,7 +258,7 @@ There are queries that "hung" as well; and there are also interesting hangs:
   The node that got the query for the execution start consuming 100%+ CPU and does not respond nor allow
   to run new queries. Multiple attempts to run query will get stuck multiple nodes. The time required to
   complete the query and un-stuck grows quadratically (or even cubic). \
-  Report: ...
+  Report: CVE-2026-31947 https://github.com/scylladb/scylladb/security/advisories/GHSA-m3pw-86f4-j3rx
 
 ### TiDB
 
