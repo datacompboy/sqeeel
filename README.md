@@ -158,14 +158,16 @@ Automatic finds:
   Reason: CWE-400 "Uncontrolled Resource Consumption" \
   The longer the list of joins, the long query runs, and one can't interrupt the query, meaning 100% cpu is consumed
   by each thread even after client disconnects. You can't cancel query server-side even with `KILL QUERY`. \
-  Fix: [https://jira.mariadb.org/browse/MDEV-37938]
+  Fix: [https://jira.mariadb.org/browse/MDEV-37938] \
+  Note: same as MySQL CVE-2026-21968
 - Template: `('SELECT * FROM ', '', 'x x$ ', 'JOIN x x$ ON x ', '')` \
   Query: `SELECT * FROM x x0 JOIN x x1 on x JOIN x x2 on x JOIN x x3 on x ...` \
   Effect: crash (SIGSEGV) \
   Reason: CWE-400 "Uncontrolled Resource Consumption" \
   For the interval between ~14k and 50k JOINs, the server crashes with SIGSEGV trying to access memory outside of the
   stack due to stack overflow. \
-  Fix: [https://jira.mariadb.org/browse/MDEV-38168]
+  Fix: [https://jira.mariadb.org/browse/MDEV-38168] \
+  Note: same as MySQL CVE-2026-34303
 
 Manually constructed templates:
 
@@ -197,6 +199,9 @@ Automatic finds:
   crashing the whole database server process with all other currently running queries. \
   Report: ...
 
+Note: PostgreSQL does not treat these as security issues, as they are not the data controlled, and the queries
+assumed to be safe for their engine; hence reported via public channel.
+
 ### CockroachDB
 
 Just a few cases with same effect but different crash sources:
@@ -212,19 +217,16 @@ Just a few cases with same effect but different crash sources:
   Effect: crash (stack overflow) \
   Reason: CWE-400 "Uncontrolled Resource Consumption" \
   Crash is at : `github.com/cockroachdb/cockroach/pkg/sql/sem/tree.(*BinaryExpr).TypeCheck` \
-  Report: ...
 - Template: `('SELECT LIMIT ', 'CASE ', '0 ', 'WHEN 0 THEN 0 END ', 'OFFSET 0')` \
   Query: `SELECT LIMIT CASE CASE ... CASE 0 WHEN 0 THEN 0 END ... WHEN 0 THEN 0 END OFFSET 0` \
   Effect: crash (stack overflow) \
   Reason: CWE-400 "Uncontrolled Resource Consumption" \
   Crash is at : `github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder.(*Builder).buildScalar` \
-  Report: ...
 - Template: `('SELECT LIMIT ', 'IFERROR ( ', '0 ', ', 0 ) [ : ] ', 'OFFSET 0')` \
   Query: `SELECT LIMIT IFERROR ( IFERROR ( IFERROR ( 0, 0 ) [ : ] , 0 ) [ : ] , 0 ) [ : ] OFFSET 0` \
   Effect: crash (stack overflow) \
   Reason: CWE-400 "Uncontrolled Resource Consumption" \
   Crash is at : `github.com/cockroachdb/cockroach/pkg/sql/sem/tree.(*IfErrExpr).Walk` \
-  Report: ...
 
 There are queries that "hung" as well; and there are also interesting hangs:
 
@@ -233,7 +235,6 @@ There are queries that "hung" as well; and there are also interesting hangs:
   Effect: hang \
   Reason: CWE-405 "CWE-405: Asymmetric Resource Consumption (Amplification)" \
   The query execution time grows with quadratic/cubic time: 500 reps => 4.6s, 1000 => 35.5s, 2000 => 287.3s \
-  Report: ...
 - Template: `('WITH x AS (SHOW STATEMENTS) SELECT FROM x', ' x$,x', ' LIMIT 1')` \
   Query: `WITH x AS (SHOW STATEMENTS) SELECT FROM x x0,x x1,x x2,...,x LIMIT 1` \
   Effect: hang + oom \
@@ -241,7 +242,11 @@ There are queries that "hung" as well; and there are also interesting hangs:
   The query consumes lot of time in "preparing" state when it can't be cancelled, and at the same time
   consumes lot of memory during both preparing and execute phases, despite returning zero columns and
   limited to only single row. \
-  Report: ...
+
+Note: communication with CockroackDB over Inspectiv was very inefficient, with no information feedback
+flow. The direct communication with their secuirty director helped to understand how it goes, but I
+still left with mixed understanding on what they accepted, what not... Yet, the report since 31/10/2025,
+so from 1st May the 180 days they ask for has passed.
 
 ### ScyllaDB
 
@@ -259,6 +264,8 @@ There are queries that "hung" as well; and there are also interesting hangs:
   to run new queries. Multiple attempts to run query will get stuck multiple nodes. The time required to
   complete the query and un-stuck grows quadratically (or even cubic). \
   Report: CVE-2026-31947 https://github.com/scylladb/scylladb/security/advisories/GHSA-m3pw-86f4-j3rx
+
+Note: tried multiple communication channels from end of October to get them accepted on 15th March...
 
 ### TiDB
 
@@ -292,6 +299,8 @@ Manual tests:
 
 Automated search also found multiple variations of hung / crash / oom queries.
 
+Didn't get any feedback on the issue from multiple attempts to contact over email from end of Oct 25.
+
 ### SingleStore
 
 - Template: `('SELECT * FROM ', '', 'x x$ ', 'JOIN x x$ ON x ', '')` \
@@ -310,15 +319,18 @@ Automated search also found multiple variations of hung / crash / oom queries.
 
   which suggests improperly placed checks, so the deep process sometimes hit the limit, sometimes triggers SIGSEGV.
 
+Note: The HackerOne submission was auto-triaged as out of the program. The esca Somehow communication failed over any channel I tried, but by poking via live humans got it triaged
+as not a security issue with internal escalation to their engineering team.
+
 ### MySQL
 
-Tracking #:    S2329421
+Tracking #:    S2329421/CVE-2026-22017
 Description:   MySQL Server DoS query
 
-Tracking #:    S2329413/CVE-2026-21968:
+Tracking #:    S2329413/CVE-2026-21968
 Description:   MySQL server: CPU-eating DoS query
 
-Tracking #:    S2389842
+Tracking #:    S2389842/CVE-2026-34303
 Description:   CRASH INSIDE OF THE QUERY PARSER/PLANNER/RESOLVER
 
 NOTE: Fill in
