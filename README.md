@@ -8,6 +8,8 @@ The project creation prompts sequence can be found in `docs/`. Generated using m
 
 Note: despite code being written by the AI, the idea / README / blog / paper / etc are 100% human :)
 
+Disclaimer: this is a personal project is not related nor endorsed by Google/Huawei/Nvidia.
+
 ## Usage
 
 ```bash
@@ -189,7 +191,7 @@ Automatic finds:
   The longer the list of joins, the long query runs, and one can't interrupt the query, meaning 100% cpu is consumed
   by each thread even after client disconnects. You can't cancel query server-side even with
   `SELECT pg_cancel_backend(..)`, nor with SIGTERM, and SIGKILL leads to abort of all other queries as well. \
-  Report: ...
+  Report: https://www.postgresql.org/message-id/CACNOLFGH_GPGXwzN23RXYbj3PaDxYKahHRGXnchCa7B%3D1TS7%2Bw%40mail.gmail.com
 - Template: `('SELECT FROM x ', ',x x$ ', '', '', '')` \
   Query: `SELECT FROM x, x x0, x x1, x x2, x x3, ...` \
   Effect: crash (out of memory) \
@@ -197,10 +199,11 @@ Automatic finds:
   While the query with join of multiple references to subquery "just" consumes unbounded CPU, when the join refers an
   existing table, server consumes unbounded O(n^2) memory, leading to server consuming all the memory available,
   crashing the whole database server process with all other currently running queries. \
-  Report: ...
+  Report: https://www.postgresql.org/message-id/CACNOLFGH_GPGXwzN23RXYbj3PaDxYKahHRGXnchCa7B%3D1TS7%2Bw%40mail.gmail.com
 
 Note: PostgreSQL does not treat these as security issues, as they are not the data controlled, and the queries
-assumed to be safe for their engine; hence reported via public channel.
+assumed to be safe for their engine; hence reported via
+public channel](https://www.postgresql.org/message-id/3b02a3fe-bf62-4231-8ea8-5021f4846e2d%40gmail.com).
 
 ### CockroachDB
 
@@ -241,7 +244,7 @@ There are queries that "hung" as well; and there are also interesting hangs:
   Reason: CWE-405 "CWE-405: Asymmetric Resource Consumption (Amplification)" \
   The query consumes lot of time in "preparing" state when it can't be cancelled, and at the same time
   consumes lot of memory during both preparing and execute phases, despite returning zero columns and
-  limited to only single row. \
+  limited to only single row.
 
 Note: communication with CockroackDB over Inspectiv was very inefficient, with no information feedback
 flow. The direct communication with their secuirty director helped to understand how it goes, but I
@@ -319,21 +322,31 @@ Didn't get any feedback on the issue from multiple attempts to contact over emai
 
   which suggests improperly placed checks, so the deep process sometimes hit the limit, sometimes triggers SIGSEGV.
 
-Note: The HackerOne submission was auto-triaged as out of the program. The esca Somehow communication failed over any channel I tried, but by poking via live humans got it triaged
-as not a security issue with internal escalation to their engineering team.
+Note: The HackerOne submission was auto-triaged as out of the program. Somehow communication failed over any channel I tried, but by poking via live humans got it triaged as not a security issue with internal escalation to their engineering team.
 
 ### MySQL
 
-Tracking #:    S2329421/CVE-2026-22017
-Description:   MySQL Server DoS query
+- Template: `("SELECT 1", ",1")` \
+  Query: `SELECT 1,1,1,1,1...` \
+  Effect: Hung / OOM \
+  Reason: CWE-400 "Uncontrolled Resource Consumption" \
+  Report: S2329421/CVE-2026-22017 \
+  The queries are non-cancellable, consume CPU and RAM, run several times to crash the server with OOM.
+- Template: `("WITH x AS (SELECT 1) SELECT 1 FROM x x", ", x x$")` \
+  Query: `WITH x AS (SELECT 1) SELECT 1 FROM x x, x x0, x x1, x x2, ...` \
+  Effect: Hung \
+  Reason: CWE-400 "Uncontrolled Resource Consumption" \
+  Report: S2329413/CVE-2026-21968 \
+  These queries are small (full effect around 200k repeat or ~2mb size) also non-cancellable, consume CPU and about
+  1 GiB of ram for 2 MiB query. 
+- Template: `("SELECT * FROM x x$", "", "x x$ ", "JOIN x x$ ON x ", "")`
+  Query: `SELECT * FROM x x0 JOIN x x1 ON x JOIN x x2 ON x JOIN x x3 ON x` \
+  Effect: Crash \
+  Reason: CWE-400 "Uncontrolled Resource Consumption" \
+  Report: S2389842/CVE-2026V-34303 \
+  Some crash inside of query parser/planner/resolver.
 
-Tracking #:    S2329413/CVE-2026-21968
-Description:   MySQL server: CPU-eating DoS query
-
-Tracking #:    S2389842/CVE-2026-34303
-Description:   CRASH INSIDE OF THE QUERY PARSER/PLANNER/RESOLVER
-
-NOTE: Fill in
+It took several patch releases to get all three out, but latest MySQL didn't hit anything new valuable on autosweep.
 
 ### Firebolt
 
